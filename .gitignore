@@ -1,0 +1,16 @@
+.dart_tool/
+.packages
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+pubspec.lock
+*.iml
+.idea/
+.DS_Store
+# Платформенные папки генерируются скриптом tool/setup_platforms.sh
+/android/
+/ios/
+
+# Ключ подписи — не коммитить
+/signing/
+/_to_delete/
