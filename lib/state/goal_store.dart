@@ -5,6 +5,7 @@ import '../logic/schedule.dart';
 import '../models/day.dart';
 import '../models/goal.dart';
 import '../services/notifications.dart';
+import '../services/widget_sync.dart';
 
 class GoalStore extends ChangeNotifier {
   /// Максимум активных целей.
@@ -38,12 +39,14 @@ class GoalStore extends ChangeNotifier {
     if (changed) await _repo.save(goals);
     loaded = true;
     notifyListeners();
+    await WidgetSync.update(goals);
     await Notifications.instance.reschedule(goals);
   }
 
   Future<void> _persist() async {
     await _repo.save(goals);
     notifyListeners();
+    await WidgetSync.update(goals);
     await Notifications.instance.reschedule(goals);
   }
 

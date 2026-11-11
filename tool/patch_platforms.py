@@ -5,6 +5,8 @@
 """
 import pathlib
 import re
+import shutil
+import struct
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -46,8 +48,41 @@ if "POST_NOTIFICATIONS" not in m:
     m = re.sub(r"(<manifest[^>]*>)", lambda x: x.group(1) + PERMS, m, count=1)
 if "ScheduledNotificationReceiver" not in m:
     m = m.replace("</application>", RECEIVERS + "    </application>", 1)
+
+WIDGET = """
+        <receiver android:name=".TodayWidgetProvider" android:exported="true"
+            android:label="@string/widget_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider"
+                android:resource="@xml/today_widget_info" />
+        </receiver>
+        <receiver android:name="es.antonborri.home_widget.HomeWidgetBackgroundReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="es.antonborri.home_widget.action.BACKGROUND" />
+            </intent-filter>
+        </receiver>
+        <service android:name="es.antonborri.home_widget.HomeWidgetBackgroundService"
+            android:permission="android.permission.BIND_JOB_SERVICE"
+            android:exported="true" />
+"""
+if "TodayWidgetProvider" not in m:
+    m = m.replace("</application>", WIDGET + "    </application>", 1)
 m = re.sub(r'android:label="[^"]*"', f'android:label="{APP_NAME}"', m, count=1)
 write(manifest, m)
+
+# ---------------- Android: виджет, ресурсы, иконка ----------------
+main_dir = ROOT / "android/app/src/main"
+extra = ROOT / "tool/android_extra"
+shutil.copytree(extra / "res", main_dir / "res", dirs_exist_ok=True)
+activity = list((main_dir / "kotlin").rglob("MainActivity.kt"))
+if activity:
+    shutil.copy(extra / "kotlin/TodayWidgetProvider.kt", activity[0].parent / "TodayWidgetProvider.kt")
+else:
+    errors.append("не найден MainActivity.kt — некуда положить виджет")
+shutil.copytree(ROOT / "tool/icons/android", main_dir / "res", dirs_exist_ok=True)
 
 # ---------------- Android: desugaring ----------------
 kts = ROOT / "android/app/build.gradle.kts"
@@ -96,6 +131,22 @@ p = read(plist)
 p = re.sub(r"(<key>CFBundleDisplayName</key>\s*<string>)[^<]*(</string>)",
            lambda x: x.group(1) + APP_NAME + x.group(2), p, count=1)
 write(plist, p)
+
+# ---------------- iOS: иконка ----------------
+def png_size(path):
+    with open(path, "rb") as f:
+        head = f.read(24)
+    return struct.unpack(">II", head[16:24])
+
+appicon = ROOT / "ios/Runner/Assets.xcassets/AppIcon.appiconset"
+ios_icons = ROOT / "tool/icons/ios"
+for png in appicon.glob("*.png"):
+    w, _ = png_size(png)
+    src = ios_icons / f"{w}.png"
+    if src.exists():
+        shutil.copy(src, png)
+    else:
+        print(f"нет иконки {w}px для {png.name} — оставлена стандартная")
 
 if errors:
     print("ОШИБКИ ПАТЧА:\n  " + "\n  ".join(errors))

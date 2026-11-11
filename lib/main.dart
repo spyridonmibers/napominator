@@ -1,7 +1,11 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:home_widget/home_widget.dart';
 
 import 'services/notifications.dart';
+import 'services/widget_sync.dart';
 import 'state/goal_store.dart';
 import 'ui/home_screen.dart';
 import 'ui/theme.dart';
@@ -13,6 +17,11 @@ Future<void> main() async {
     await Notifications.instance.init(onDone: (id) => store.completeById(id));
   } catch (_) {
     // Приложение работает и без уведомлений.
+  }
+  if (Platform.isAndroid) {
+    try {
+      await HomeWidget.registerInteractivityCallback(widgetBackgroundCallback);
+    } catch (_) {}
   }
   runApp(NapominatorApp(store: store));
   store.refresh();

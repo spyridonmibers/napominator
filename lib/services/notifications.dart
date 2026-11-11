@@ -9,8 +9,16 @@ import '../data/goal_repository.dart';
 import '../logic/schedule.dart';
 import '../models/day.dart';
 import '../models/goal.dart';
+import 'widget_sync.dart';
 
 const _channelId = 'goal_reminders';
+const _summaryChannelId = 'daily_summary';
+
+/// Постоянная сводка «Сегодня: осталось N из M».
+const summaryId = 1;
+
+/// Если целей больше — в сводке только количество.
+const _summaryMaxLines = 5;
 const _actionDone = 'done';
 const _iosCategory = 'goal';
 const _exactAskedFlag = 'exact_alarm_asked';
@@ -42,6 +50,7 @@ void notificationTapBackground(NotificationResponse response) async {
   if (complete(goal, todayDay())) {
     await repo.save(goals);
   }
+  await WidgetSync.update(goals);
   try {
     await Notifications.instance.init();
     await Notifications.instance.cancelGoal(goal);
@@ -77,7 +86,7 @@ class Notifications {
     if (_initialized) return;
     tzdata.initializeTimeZones();
 
-    const android = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const android = AndroidInitializationSettings('ic_stat_goal');
     final darwin = DarwinInitializationSettings(
       requestAlertPermission: false,
       requestBadgePermission: false,
@@ -178,6 +187,7 @@ class Notifications {
     // Снимаем только запланированные: показанные «висящие» не трогаем,
     // чтобы они не звенели заново при каждом открытии приложения.
     for (final p in await _plugin.pendingNotificationRequests()) {
+      if (p.id == summaryId) continue; // перезапишется ниже
       await _plugin.cancel(p.id);
     }
 
@@ -243,7 +253,11 @@ class Notifications {
       } catch (_) {}
     }
 
-    for (final e in entries.take(limit)) {
+    try {
+      await _updateSummary(goals, mode);
+    } catch (_) {}
+
+    for (final e in entries.take(limit - 1)) {
       await _plugin.zonedSchedule(
         e.id,
         e.goal.title,
@@ -254,6 +268,98 @@ class Notifications {
         payload: e.goal.id,
       );
     }
+  }
+
+  NotificationDetails _summaryDetails(String title, List<String> lines) =>
+      NotificationDetails(
+        android: AndroidNotificationDetails(
+          _summaryChannelId,
+          'Сводка на сегодня',
+          channelDescription: 'Постоянное уведомление со списком целей на день',
+          importance: Importance.low,
+          priority: Priority.low,
+          ongoing: true,
+          autoCancel: false,
+          onlyAlertOnce: true,
+          showWhen: false,
+          silent: true,
+          category: AndroidNotificationCategory.status,
+          styleInformation: lines.isEmpty
+              ? null
+              : InboxStyleInformation(lines, contentTitle: title),
+        ),
+        iOS: const DarwinNotificationDetails(
+          presentAlert: false,
+          presentBanner: false,
+          presentSound: false,
+          presentBadge: false,
+          presentList: true,
+          interruptionLevel: InterruptionLevel.passive,
+          threadIdentifier: 'summary',
+        ),
+      );
+
+  /// Текст сводки по списку «осталось» и количеству выполненных.
+  (String, String, List<String>) _summaryText(List<Goal> left, int done) {
+    final total = left.length + done;
+    final title = left.isEmpty
+        ? 'Сегодня всё выполнено · $done из $total'
+        : 'Сегодня: осталось ${left.length} из $total';
+    if (left.isEmpty) return (title, 'Отличная работа!', const <String>[]);
+    if (left.length > _summaryMaxLines) {
+      return (title, 'Целей на сегодня: ${left.length}', const <String>[]);
+    }
+    final lines = [for (final g in left) '○  ${g.title}'];
+    return (title, left.map((g) => g.title).join(', '), lines);
+  }
+
+  /// Показать/обновить постоянную сводку и запланировать сводку на завтра.
+  Future<void> _updateSummary(List<Goal> goals, AndroidScheduleMode mode) async {
+    final now = DateTime.now();
+    final t = dayOf(now);
+    final tomorrow = addDays(t, 1);
+    int byTime(Goal a, Goal b) =>
+        (a.reminderMinutes ?? 9999).compareTo(b.reminderMinutes ?? 9999);
+
+    final left = <Goal>[];
+    var done = 0;
+    for (final g in goals) {
+      if (doneOn(g, t) && (isActive(g) || g.finished)) {
+        done++;
+      } else if (isActive(g) && !g.nextDue.isAfter(t)) {
+        left.add(g);
+      }
+    }
+    left.sort(byTime);
+
+    final next = goals
+        .where((g) => isActive(g) && !g.nextDue.isAfter(tomorrow))
+        .toList()
+      ..sort(byTime);
+
+    // Снимаем старую запланированную сводку на завтра, если планировать нечего.
+    // cancel убирает и показанную — она сразу же покажется заново ниже.
+    if (next.isEmpty) await _plugin.cancel(summaryId);
+
+    if (left.isEmpty && done == 0) {
+      await _plugin.cancel(summaryId);
+    } else {
+      final (title, body, lines) = _summaryText(left, done);
+      await _plugin.show(summaryId, title, body, _summaryDetails(title, lines));
+    }
+    if (next.isEmpty) return;
+
+    // Если приложение не откроют, в 00:01 сводка обновится сама.
+    final (nTitle, nBody, nLines) = _summaryText(next, 0);
+    await _plugin.zonedSchedule(
+      summaryId,
+      nTitle,
+      nBody,
+      tz.TZDateTime.from(
+          DateTime(tomorrow.year, tomorrow.month, tomorrow.day, 0, 1), tz.UTC),
+      _summaryDetails(nTitle, nLines),
+      androidScheduleMode: mode,
+    );
   }
 
   String _body(Goal g) {
