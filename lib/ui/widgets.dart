@@ -323,7 +323,7 @@ class EmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            GoalBadge(palette: goalPalettes[0], icon: icon, size: 88),
+            GoalBadge(palette: brandPalette(), icon: icon, size: 88),
             const SizedBox(height: 28),
             Text(title,
                 textAlign: TextAlign.center,

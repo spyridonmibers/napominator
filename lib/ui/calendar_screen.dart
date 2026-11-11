@@ -259,7 +259,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
         height: 52,
         margin: const EdgeInsets.all(2),
         decoration: BoxDecoration(
-          gradient: selected ? goalPalettes[0].gradient : null,
+          gradient: selected ? brandPalette().gradient : null,
           borderRadius: BorderRadius.circular(14),
           border: isToday && !selected
               ? Border.all(color: th.colorScheme.primary, width: 1.5)

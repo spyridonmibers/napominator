@@ -4,11 +4,13 @@ import 'dart:ui' show DartPluginRegistrant;
 
 import 'package:flutter/services.dart';
 import 'package:home_widget/home_widget.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/goal_repository.dart';
 import '../logic/schedule.dart';
 import '../models/day.dart';
 import '../models/goal.dart';
+import '../state/app_settings.dart';
 import '../ui/theme.dart';
 import 'notifications.dart';
 
@@ -82,6 +84,8 @@ class WidgetSync {
   static Future<void> update(List<Goal> goals) async {
     if (!Platform.isAndroid && !Platform.isIOS) return;
     try {
+      final prefs = await SharedPreferences.getInstance();
+      final lockScreen = prefs.getBool(AppSettings.kLockScreen) ?? true;
       final t = todayDay();
       final tomorrow = addDays(t, 1);
       final today = <Goal>[];
@@ -92,7 +96,7 @@ class WidgetSync {
         if ((active && !g.nextDue.isAfter(t)) || (done && (active || g.finished))) {
           today.add(g);
         }
-        if (active && !g.nextDue.isAfter(tomorrow)) next.add(g);
+        if (wouldBeDue(g, tomorrow)) next.add(g);
       }
       int byTime(Goal a, Goal b) =>
           (a.reminderMinutes ?? 9999).compareTo(b.reminderMinutes ?? 9999);
@@ -103,6 +107,11 @@ class WidgetSync {
       next.sort(byTime);
 
       if (Platform.isIOS) {
+        if (!lockScreen) {
+          await LiveSync.push({'items': <Object>[], 'done': 0, 'total': 0});
+          Notifications.instance.useSummary = false;
+          return;
+        }
         final doneCount = today.where((g) => doneOn(g, t)).length;
         final ok = await LiveSync.push({
           'items': [for (final g in today.take(6)) _item(g, doneOn(g, t))],
@@ -116,6 +125,7 @@ class WidgetSync {
       Notifications.instance.useSummary = false; // на Android — нативная панель
       final data = {
         'date': dayKey(t),
+        'panel': lockScreen,
         'today': [for (final g in today) _item(g, doneOn(g, t))],
         'next': [for (final g in next) _item(g, false)],
       };

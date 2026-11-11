@@ -206,7 +206,7 @@ class Notifications {
       final h = minutes ~/ 60, m = minutes % 60;
       for (var d = 0; d < _daysAhead; d++) {
         final day = addDays(t, d);
-        if (day.isBefore(g.nextDue) || doneOn(g, day)) continue;
+        if (!wouldBeDue(g, day) || doneOn(g, day)) continue;
         final first = DateTime(day.year, day.month, day.day, h, m);
         final times = <DateTime>[first];
         if (_isIOS) {
@@ -341,7 +341,7 @@ class Notifications {
     left.sort(byTime);
 
     final next = goals
-        .where((g) => isActive(g) && !g.nextDue.isAfter(tomorrow))
+        .where((g) => wouldBeDue(g, tomorrow))
         .toList()
       ..sort(byTime);
 
@@ -371,7 +371,9 @@ class Notifications {
   }
 
   String _body(Goal g) {
-    final shift = g.missedDays > 0 ? ' (перенесено дней: ${g.missedDays})' : '';
+    final shift = g.missedDays > 0 && g.carry != CarryMode.skip
+        ? ' (перенесено дней: ${g.missedDays})'
+        : '';
     return 'Отметьте выполнение цели на сегодня$shift';
   }
 }

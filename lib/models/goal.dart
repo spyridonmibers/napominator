@@ -5,6 +5,12 @@ enum RepeatType { daily, everyOtherDay, weekdays, cycle }
 
 enum DeadlineType { none, date, count }
 
+/// Что делать, если день пропущен:
+/// shift — перенести цель на завтра и сдвинуть весь график (и срок) на день;
+/// keep  — перенести цель на завтра, но дальше идти по прежнему графику;
+/// skip  — не переносить: пропуск засчитывается, цель ждёт следующего дня по графику.
+enum CarryMode { shift, keep, skip }
+
 class Goal {
   Goal({
     required this.id,
@@ -28,6 +34,8 @@ class Goal {
     this.archived = false,
     this.cycleOn = 2,
     this.cycleOff = 2,
+    this.carry = CarryMode.shift,
+    this.endShift = 0,
     List<DateTime>? missedLog,
   })  : completions = completions ?? <DateTime>[],
         missedLog = missedLog ?? <DateTime>[];
@@ -86,6 +94,12 @@ class Goal {
   int cycleOn;
   int cycleOff;
 
+  /// Поведение при пропуске дня.
+  CarryMode carry;
+
+  /// На сколько дней продлена дата окончания (только в режиме [CarryMode.shift]).
+  int endShift;
+
   Map<String, dynamic> toJson() => {
         'id': id,
         'notifId': notifId,
@@ -108,6 +122,8 @@ class Goal {
         'archived': archived,
         'cycleOn': cycleOn,
         'cycleOff': cycleOff,
+        'carry': carry.name,
+        'endShift': endShift,
         'missedLog': missedLog.map(dayKey).toList(),
       };
 
@@ -138,6 +154,11 @@ class Goal {
         archived: j['archived'] as bool? ?? false,
         cycleOn: (j['cycleOn'] as num?)?.toInt() ?? 2,
         cycleOff: (j['cycleOff'] as num?)?.toInt() ?? 2,
+        carry: CarryMode.values.asNameMap()[j['carry']] ?? CarryMode.shift,
+        // Старые цели всегда сдвигали график — продление срока равно числу переносов.
+        endShift: (j['endShift'] as num?)?.toInt() ??
+            (j['missedDays'] as num?)?.toInt() ??
+            0,
         missedLog: ((j['missedLog'] as List?) ?? const [])
             .map((e) => parseDay(e as String))
             .toList(),

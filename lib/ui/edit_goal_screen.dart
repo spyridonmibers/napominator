@@ -3,8 +3,10 @@ import 'package:flutter/material.dart';
 
 import '../models/day.dart';
 import '../models/goal.dart';
+import '../state/app_settings.dart';
 import '../state/goal_store.dart';
 import 'format.dart';
+import 'settings_screen.dart' show CarryPicker;
 import 'theme.dart';
 import 'widgets.dart';
 
@@ -37,6 +39,7 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
   late String _icon;
   late int _cycleOn;
   late int _cycleOff;
+  late CarryMode _carry;
   String? _error;
   bool _saving = false;
 
@@ -60,6 +63,7 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
     _icon = g?.icon ?? 'target';
     _cycleOn = g?.cycleOn ?? 2;
     _cycleOff = g?.cycleOff ?? 2;
+    _carry = g?.carry ?? AppSettings.instance.defaultCarry;
   }
 
   @override
@@ -100,8 +104,24 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
     if (picked != null) setState(() => _end = dayOf(picked));
   }
 
-  /// Колесо выбора времени (часы и минуты с шагом 5 минут).
+  /// Выбор времени: колесо или циферблат — как выбрано в настройках.
   Future<void> _pickTime() async {
+    if (AppSettings.instance.timeStyle == TimePickerStyle.dial) {
+      final cur = _reminder ?? 9 * 60;
+      final picked = await showTimePicker(
+        context: context,
+        initialTime: TimeOfDay(hour: cur ~/ 60, minute: cur % 60),
+        helpText: 'Время напоминания',
+        builder: (c, child) => MediaQuery(
+          data: MediaQuery.of(c).copyWith(alwaysUse24HourFormat: true),
+          child: child!,
+        ),
+      );
+      if (picked != null) {
+        setState(() => _reminder = picked.hour * 60 + picked.minute);
+      }
+      return;
+    }
     final m = ((_reminder ?? 9 * 60) ~/ 5) * 5;
     var selected = m;
     final result = await showModalBottomSheet<int>(
@@ -245,6 +265,7 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
         icon: _icon,
         cycleOn: _cycleOn,
         cycleOff: _cycleOff,
+        carry: _carry,
       );
       await store.add(g);
     } else {
@@ -267,7 +288,8 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
         ..colorIndex = _color
         ..icon = _icon
         ..cycleOn = _cycleOn
-        ..cycleOff = _cycleOff;
+        ..cycleOff = _cycleOff
+        ..carry = _carry;
       await store.update(old, patternChanged: patternChanged);
     }
     if (mounted) Navigator.of(context).pop();
@@ -498,6 +520,16 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
                   ),
                 ],
               ],
+            ),
+          ),
+
+          // ---- Пропуск ----
+          const SectionTitle('Если пропустить день'),
+          AppCard(
+            child: CarryPicker(
+              value: _carry,
+              palette: pal,
+              onChanged: (v) => setState(() => _carry = v),
             ),
           ),
 

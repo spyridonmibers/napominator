@@ -9,6 +9,7 @@ import 'calendar_screen.dart';
 import 'edit_goal_screen.dart';
 import 'goal_detail_screen.dart';
 import 'goals_screen.dart';
+import 'settings_screen.dart';
 import 'today_screen.dart';
 
 /// Главный экран с нижним меню: Сегодня / Календарь / Все цели.
@@ -86,9 +87,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           TodayScreen(store: store, onAdd: _add, onOpen: _open),
           CalendarScreen(store: store, onOpen: _open),
           GoalsScreen(store: store, onAdd: _add, onOpen: _open),
+          SettingsScreen(store: store),
         ],
       ),
-      floatingActionButton: _tab == 1
+      floatingActionButton: _tab == 1 || _tab == 3
           ? null
           : FloatingActionButton(
               onPressed: _add,
@@ -113,6 +115,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             icon: Icon(Icons.grid_view_outlined),
             selectedIcon: Icon(Icons.grid_view_rounded),
             label: 'Все цели',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.settings_outlined),
+            selectedIcon: Icon(Icons.settings_rounded),
+            label: 'Настройки',
           ),
         ],
       ),

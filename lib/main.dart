@@ -6,12 +6,16 @@ import 'package:home_widget/home_widget.dart';
 
 import 'services/notifications.dart';
 import 'services/widget_sync.dart';
+import 'state/app_settings.dart';
 import 'state/goal_store.dart';
 import 'ui/home_screen.dart';
 import 'ui/theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  try {
+    await AppSettings.instance.load();
+  } catch (_) {}
   final store = GoalStore();
   try {
     await Notifications.instance.init(onDone: (id) => store.completeById(id));
@@ -34,7 +38,10 @@ class NapominatorApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    final settings = AppSettings.instance;
+    return ListenableBuilder(
+      listenable: settings,
+      builder: (context, _) => MaterialApp(
       title: 'Напоминатор',
       debugShowCheckedModeBanner: false,
       locale: const Locale('ru'),
@@ -44,9 +51,11 @@ class NapominatorApp extends StatelessWidget {
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      theme: buildTheme(Brightness.light),
-      darkTheme: buildTheme(Brightness.dark),
+      themeMode: settings.themeMode,
+      theme: buildTheme(Brightness.light, accent: settings.accent),
+      darkTheme: buildTheme(Brightness.dark, accent: settings.accent),
       home: HomeScreen(store: store),
+      ),
     );
   }
 }

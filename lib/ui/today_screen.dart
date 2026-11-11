@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -21,6 +23,9 @@ class TodayScreen extends StatelessWidget {
   final VoidCallback onAdd;
   final void Function(Goal) onOpen;
 
+  /// Последняя показанная плашка «Выполнено · Отменить».
+  static ScaffoldFeatureController<SnackBar, SnackBarClosedReason>? _snack;
+
   Future<void> _toggle(BuildContext context, Goal g, bool done) async {
     HapticFeedback.mediumImpact();
     if (done) {
@@ -31,9 +36,9 @@ class TodayScreen extends StatelessWidget {
     if (!ok || !context.mounted) return;
     final u = store.byId(g.id);
     final finished = u != null && u.finished;
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(
+    final messenger = ScaffoldMessenger.of(context)..hideCurrentSnackBar();
+    final controller = messenger.showSnackBar(SnackBar(
+        duration: const Duration(seconds: 5),
         content: Row(
           children: [
             Icon(
@@ -57,6 +62,14 @@ class TodayScreen extends StatelessWidget {
           },
         ),
       ));
+    // В новых версиях Flutter плашка с кнопкой сама не исчезает — закрываем через 5 секунд.
+    // Закрываем только свою плашку: если за это время показали новую, её не трогаем.
+    _snack = controller;
+    var closed = false;
+    controller.closed.then((_) => closed = true);
+    Timer(const Duration(seconds: 5), () {
+      if (!closed && identical(_snack, controller)) controller.close();
+    });
   }
 
   @override
@@ -221,7 +234,7 @@ class _Header extends StatelessWidget {
               value: done / total,
               size: 76,
               stroke: 9,
-              gradient: goalPalettes[0].gradient,
+              gradient: brandPalette().gradient,
               child: Text(
                 '$done/$total',
                 style: th.textTheme.titleMedium
@@ -286,7 +299,7 @@ class _TodayCard extends StatelessWidget {
                         text: formatTime(g.reminderMinutes!),
                         color: th.colorScheme.onSurfaceVariant,
                       ),
-                    if (!done && g.missedDays > 0)
+                    if (!done && g.missedDays > 0 && g.carry != CarryMode.skip)
                       Pill(
                         icon: Icons.update_rounded,
                         text: 'перенос +${g.missedDays}',
@@ -353,7 +366,7 @@ class _AllDoneCard extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(top: 16),
       child: AppCard(
-        gradient: goalPalettes[0].gradient,
+        gradient: brandPalette().gradient,
         padding: const EdgeInsets.all(20),
         child: Row(
           children: [

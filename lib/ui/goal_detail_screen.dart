@@ -7,6 +7,7 @@ import '../models/goal.dart';
 import '../state/goal_store.dart';
 import 'edit_goal_screen.dart';
 import 'format.dart';
+import 'settings_screen.dart' show carryTitles;
 import 'theme.dart';
 import 'widgets.dart';
 
@@ -95,6 +96,12 @@ class GoalDetailScreen extends StatelessWidget {
                 textAlign: TextAlign.center,
                 style: th.textTheme.bodyLarge?.copyWith(color: th.colorScheme.onSurfaceVariant),
               ),
+              const SizedBox(height: 4),
+              Text(
+                'При пропуске: ${carryTitles[g.carry]!.toLowerCase()}',
+                textAlign: TextAlign.center,
+                style: th.textTheme.bodySmall?.copyWith(color: th.colorScheme.onSurfaceVariant),
+              ),
               const SizedBox(height: 10),
               Center(child: _statusPill(context, g, dueToday, doneToday)),
               const SizedBox(height: 22),
@@ -159,7 +166,7 @@ class GoalDetailScreen extends StatelessWidget {
                       icon: Icons.update_rounded,
                       color: th.colorScheme.error,
                       value: '${g.missedDays}',
-                      label: 'дней переноса',
+                      label: g.carry == CarryMode.skip ? 'пропущено' : 'дней переноса',
                     ),
                   ),
                 ],
@@ -219,7 +226,7 @@ class GoalDetailScreen extends StatelessWidget {
       return Pill(icon: Icons.check_rounded, text: 'Сегодня выполнено', color: AppColors.success(context));
     }
     if (dueToday) {
-      return g.missedDays > 0
+      return g.missedDays > 0 && g.carry != CarryMode.skip
           ? Pill(icon: Icons.update_rounded, text: 'Сегодня · перенос +${g.missedDays}', color: th.colorScheme.error)
           : Pill(icon: Icons.today_rounded, text: 'Нужно сделать сегодня', color: paletteOf(g).main);
     }

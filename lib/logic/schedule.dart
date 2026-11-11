@@ -1,8 +1,10 @@
 /// Логика расписания.
 ///
-/// Правило: у цели есть [Goal.nextDue] — день ближайшего выполнения.
-/// Если день прошёл, а отметки нет, цель переносится на сегодня,
-/// и весь график (а также дата окончания) сдвигается на столько же дней.
+/// У цели есть [Goal.nextDue] — день ближайшего выполнения. Если день прошёл,
+/// а отметки нет, дальше всё зависит от [Goal.carry]:
+/// - shift: цель переносится на сегодня, весь график и срок сдвигаются;
+/// - keep: цель переносится на сегодня, график остаётся прежним;
+/// - skip: пропуск засчитывается, цель ждёт следующего дня по графику.
 library;
 
 import '../models/day.dart';
@@ -39,22 +41,45 @@ DateTime nextOccurrence(Goal g, DateTime from) {
 bool doneOn(Goal g, DateTime day) => g.completions.contains(day);
 
 DateTime? effectiveEndDate(Goal g) =>
-    g.endDate == null ? null : addDays(g.endDate!, g.missedDays);
+    g.endDate == null ? null : addDays(g.endDate!, g.endShift);
 
 /// Переносит просроченную цель на [today]. Возвращает true, если что-то изменилось.
 bool normalize(Goal g, DateTime today) {
   if (g.finished || g.archived) return false;
-  if (g.nextDue.isBefore(today)) {
-    final diff = daysBetween(g.nextDue, today);
-    for (var i = 0; i < diff; i++) {
-      g.missedLog.add(addDays(g.nextDue, i));
-    }
-    g.shift += diff;
-    g.missedDays += diff;
-    g.nextDue = today;
-    return true;
+  if (!g.nextDue.isBefore(today)) return false;
+  switch (g.carry) {
+    case CarryMode.shift:
+    case CarryMode.keep:
+      final diff = daysBetween(g.nextDue, today);
+      for (var i = 0; i < diff; i++) {
+        g.missedLog.add(addDays(g.nextDue, i));
+      }
+      g.missedDays += diff;
+      if (g.carry == CarryMode.shift) {
+        g.shift += diff;
+        g.endShift += diff;
+      }
+      g.nextDue = today;
+    case CarryMode.skip:
+      var d = g.nextDue;
+      var guard = 0;
+      while (d.isBefore(today) && guard < 5000) {
+        g.missedLog.add(d);
+        g.missedDays++;
+        d = nextOccurrence(g, addDays(d, 1));
+        guard++;
+      }
+      g.nextDue = d;
+      if (g.deadlineType == DeadlineType.date) _updateFinished(g, today);
   }
-  return false;
+  return true;
+}
+
+/// Будет ли цель назначена на [day], если до него её не отмечать.
+bool wouldBeDue(Goal g, DateTime day) {
+  if (!isActive(g) || day.isBefore(g.nextDue)) return false;
+  if (day == g.nextDue) return true;
+  return g.carry == CarryMode.skip ? isPatternDay(g, day) : true;
 }
 
 bool isDueToday(Goal g, DateTime today) =>
@@ -103,6 +128,7 @@ bool undoToday(Goal g, DateTime today) {
 void initGoal(Goal g, DateTime today) {
   g.shift = 0;
   g.missedDays = 0;
+  g.endShift = 0;
   g.completions.clear();
   g.missedLog.clear();
   g.nextDue = nextOccurrence(g, maxDay(g.startDate, today));
@@ -114,8 +140,12 @@ void initGoal(Goal g, DateTime today) {
 /// (но накопленные переносы по-прежнему продлевают дату окончания).
 void applyEdit(Goal g, DateTime today, {required bool patternChanged}) {
   if (patternChanged) g.shift = 0;
-  final from = doneOn(g, today) ? addDays(today, 1) : today;
-  g.nextDue = nextOccurrence(g, from);
+  final carriedToday =
+      !patternChanged && g.nextDue == today && !doneOn(g, today) && !g.archived;
+  if (!carriedToday) {
+    final from = doneOn(g, today) ? addDays(today, 1) : today;
+    g.nextDue = nextOccurrence(g, from);
+  }
   _updateFinished(g, today);
 }
 

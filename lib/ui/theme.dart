@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/goal.dart';
+import '../state/app_settings.dart';
 
 /// Градиент цвета цели.
 class GoalPalette {
@@ -73,7 +74,9 @@ const goalIcons = <String, IconData>{
 
 IconData iconOf(Goal g) => goalIcons[g.icon] ?? Icons.track_changes_rounded;
 
-const _seed = Color(0xFF6366F1);
+/// Акцентный цвет приложения (выбирается в настройках).
+GoalPalette brandPalette() =>
+    goalPalettes[AppSettings.instance.accent.abs() % goalPalettes.length];
 
 /// Цвета поверхностей, которых нет в стандартной схеме.
 class AppColors {
@@ -102,12 +105,13 @@ class AppColors {
         ];
 }
 
-ThemeData buildTheme(Brightness brightness) {
+ThemeData buildTheme(Brightness brightness, {int accent = 0}) {
   final dark = brightness == Brightness.dark;
+  final seed = goalPalettes[accent.abs() % goalPalettes.length].a;
   final scheme = ColorScheme.fromSeed(
-    seedColor: _seed,
+    seedColor: seed,
     brightness: brightness,
-  ).copyWith(primary: dark ? const Color(0xFF8B8DF8) : _seed);
+  ).copyWith(primary: dark ? Color.lerp(seed, Colors.white, 0.3) : seed);
   final base = ThemeData(
     useMaterial3: true,
     colorScheme: scheme,

@@ -10,6 +10,8 @@ class LiveGoalsPlugin: NSObject, FlutterPlugin {
         let channel = FlutterMethodChannel(name: "napominator/live", binaryMessenger: registrar.messenger())
         let instance = LiveGoalsPlugin()
         registrar.addMethodCallDelegate(instance, channel: channel)
+        let appChannel = FlutterMethodChannel(name: "napominator/app", binaryMessenger: registrar.messenger())
+        registrar.addMethodCallDelegate(instance, channel: appChannel)
         if let old = observer {
             NotificationCenter.default.removeObserver(old)
         }
@@ -23,6 +25,10 @@ class LiveGoalsPlugin: NSObject, FlutterPlugin {
     }
 
     func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+        if call.method == "setIcon" {
+            setIcon(call.arguments as? String ?? "indigo", result: result)
+            return
+        }
         guard call.method == "update", let json = call.arguments as? String else {
             result(FlutterMethodNotImplemented)
             return
@@ -31,6 +37,27 @@ class LiveGoalsPlugin: NSObject, FlutterPlugin {
             LiveGoals.update(json: json) { ok in result(ok) }
         } else {
             result(false)
+        }
+    }
+}
+
+extension LiveGoalsPlugin {
+    /// Сменить иконку: indigo — основная, остальные — AppIcon-<Name> из Assets.
+    func setIcon(_ key: String, result: @escaping FlutterResult) {
+        let names = [
+            "sunset": "AppIcon-Sunset",
+            "mint": "AppIcon-Mint",
+            "ocean": "AppIcon-Ocean",
+            "graphite": "AppIcon-Graphite",
+        ]
+        DispatchQueue.main.async {
+            guard UIApplication.shared.supportsAlternateIcons else {
+                result(false)
+                return
+            }
+            UIApplication.shared.setAlternateIconName(names[key]) { error in
+                result(error == nil)
+            }
         }
     }
 }

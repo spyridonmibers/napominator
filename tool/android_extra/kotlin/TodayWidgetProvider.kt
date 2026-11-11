@@ -57,6 +57,14 @@ class TodayWidgetProvider : HomeWidgetProvider() {
             }
         }
 
+        /** Включена ли панель на экране блокировки (настройка в приложении). */
+        fun panelEnabled(prefs: SharedPreferences): Boolean = try {
+            val raw = prefs.getString("today_json", null)
+            raw == null || JSONObject(raw).optBoolean("panel", true)
+        } catch (e: Exception) {
+            true
+        }
+
         fun countDone(items: JSONArray): Int {
             var done = 0
             for (i in 0 until items.length()) {
@@ -244,7 +252,7 @@ class TodayWidgetProvider : HomeWidgetProvider() {
         ) {
             val prefs = context.getSharedPreferences("HomeWidgetPreferences", Context.MODE_PRIVATE)
             try {
-                updatePanel(context, readItems(prefs))
+                updatePanel(context, if (panelEnabled(prefs)) readItems(prefs) else JSONArray())
             } catch (e: Exception) {
                 // не мешаем работе виджета
             }

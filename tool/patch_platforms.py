@@ -73,6 +73,32 @@ WIDGET = """
 if "TodayWidgetProvider" not in m:
     m = m.replace("</application>", WIDGET + "    </application>", 1)
 m = re.sub(r'android:label="[^"]*"', f'android:label="{APP_NAME}"', m, count=1)
+
+# Смена иконки: значок на рабочем столе даёт не MainActivity, а одна из activity-alias.
+ICON_ALIASES = [("IconIndigo", "@mipmap/ic_launcher", True)] + [
+    (f"Icon{k.capitalize()}", f"@mipmap/ic_launcher_{k}", False)
+    for k in ["sunset", "mint", "ocean", "graphite"]
+]
+if "IconIndigo" not in m:
+    m, n = re.subn(
+        r'\s*<intent-filter>\s*<action android:name="android\.intent\.action\.MAIN"\s*/>\s*'
+        r'<category android:name="android\.intent\.category\.LAUNCHER"\s*/>\s*</intent-filter>',
+        "", m, count=1)
+    if n == 0:
+        errors.append("AndroidManifest: не найден LAUNCHER intent-filter у MainActivity")
+    aliases = ""
+    for name, icon, enabled in ICON_ALIASES:
+        aliases += f"""
+        <activity-alias android:name=".{name}" android:targetActivity=".MainActivity"
+            android:enabled="{'true' if enabled else 'false'}" android:exported="true"
+            android:icon="{icon}" android:label="{APP_NAME}">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+"""
+    m = m.replace("</application>", aliases + "    </application>", 1)
 write(manifest, m)
 
 # ---------------- Android: виджет, ресурсы, иконка ----------------
@@ -82,6 +108,7 @@ shutil.copytree(extra / "res", main_dir / "res", dirs_exist_ok=True)
 activity = list((main_dir / "kotlin").rglob("MainActivity.kt"))
 if activity:
     shutil.copy(extra / "kotlin/TodayWidgetProvider.kt", activity[0].parent / "TodayWidgetProvider.kt")
+    shutil.copy(extra / "kotlin/MainActivity.kt", activity[0])
 else:
     errors.append("не найден MainActivity.kt — некуда положить виджет")
 shutil.copytree(ROOT / "tool/icons/android", main_dir / "res", dirs_exist_ok=True)
@@ -169,6 +196,11 @@ for png in appicon.glob("*.png"):
         shutil.copy(src, png)
     else:
         print(f"нет иконки {w}px для {png.name} — оставлена стандартная")
+
+# Альтернативные иконки iPhone (подключаются к сборке в tool/ios_extra/add_live_activity.rb)
+assets = ROOT / "ios/Runner/Assets.xcassets"
+for d in (ROOT / "tool/icons/ios_alt").glob("AppIcon-*.appiconset"):
+    shutil.copytree(d, assets / d.name, dirs_exist_ok=True)
 
 if errors:
     print("ОШИБКИ ПАТЧА:\n  " + "\n  ".join(errors))

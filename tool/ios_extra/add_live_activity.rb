@@ -15,6 +15,18 @@ FileUtils.cp(File.join(extra, 'Shared/GoalsActivity.swift'), File.join(ios, 'Sha
 FileUtils.cp(File.join(extra, 'Runner/LiveGoalsPlugin.swift'), File.join(ios, 'Runner'))
 
 project = Xcodeproj::Project.open(File.join(ios, 'Runner.xcodeproj'))
+
+# Альтернативные иконки (AppIcon-*.appiconset кладёт tool/patch_platforms.py)
+alt_icons = Dir[File.join(ios, 'Runner/Assets.xcassets/AppIcon-*.appiconset')].map { |d| File.basename(d, '.appiconset') }.sort
+runner_target = project.targets.find { |t| t.name == 'Runner' }
+if runner_target && !alt_icons.empty?
+  runner_target.build_configurations.each do |c|
+    c.build_settings['ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES'] = alt_icons.join(' ')
+    c.build_settings['ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS'] = 'NO'
+  end
+  project.save
+end
+
 if project.targets.any? { |t| t.name == 'GoalsLive' }
   puts 'GoalsLive уже добавлен'
   exit 0

@@ -15,6 +15,7 @@ Goal make({
   int? count,
   int on = 2,
   int off = 2,
+  CarryMode carry = CarryMode.shift,
 }) {
   final g = Goal(
     id: 't',
@@ -29,6 +30,7 @@ Goal make({
     nextDue: mon,
     cycleOn: on,
     cycleOff: off,
+    carry: carry,
   );
   initGoal(g, mon);
   return g;
@@ -177,5 +179,54 @@ void main() {
     expect(plannedDates(a, d(0), d(7)), [d(0), d(1), d(2), d(4), d(5), d(6)]);
     final b = make(repeat: RepeatType.cycle, on: 1, off: 2);
     expect(plannedDates(b, d(0), d(7)), [d(0), d(3), d(6)]);
+  });
+
+  test('перенос без сдвига графика', () {
+    final g = make(repeat: RepeatType.everyOtherDay, carry: CarryMode.keep);
+    normalize(g, d(1)); // d0 пропущен — цель висит на d1
+    expect(g.nextDue, d(1));
+    expect(g.shift, 0);
+    complete(g, d(1));
+    expect(g.nextDue, d(2)); // дальше по прежнему графику
+    expect(g.missedDays, 1);
+  });
+
+  test('без переноса: пропуск засчитывается', () {
+    final g = make(repeat: RepeatType.everyOtherDay, carry: CarryMode.skip);
+    normalize(g, d(1));
+    expect(g.nextDue, d(2));
+    expect(g.missedLog, [d(0)]);
+    normalize(g, d(5)); // пропущены d2 и d4
+    expect(g.nextDue, d(6));
+    expect(g.missedDays, 3);
+    expect(wouldBeDue(g, d(7)), isFalse);
+    expect(wouldBeDue(g, d(8)), isTrue);
+  });
+
+  test('без переноса: срок по дате не продлевается', () {
+    final g = make(
+        repeat: RepeatType.everyOtherDay,
+        carry: CarryMode.skip,
+        deadline: DeadlineType.date,
+        end: d(2));
+    normalize(g, d(3));
+    expect(g.finished, isTrue);
+  });
+
+  test('перенос со сдвигом продлевает срок, без сдвига — нет', () {
+    final a = make(deadline: DeadlineType.date, end: d(5));
+    normalize(a, d(2));
+    expect(effectiveEndDate(a), d(7));
+    final b = make(deadline: DeadlineType.date, end: d(5), carry: CarryMode.keep);
+    normalize(b, d(2));
+    expect(effectiveEndDate(b), d(5));
+  });
+
+  test('правка цели не теряет перенесённую на сегодня', () {
+    final g = make(repeat: RepeatType.everyOtherDay, carry: CarryMode.keep);
+    normalize(g, d(1));
+    g.title = 'Новое имя';
+    applyEdit(g, d(1), patternChanged: false);
+    expect(g.nextDue, d(1));
   });
 }

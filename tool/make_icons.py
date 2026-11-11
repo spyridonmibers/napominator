@@ -4,6 +4,7 @@
 Запускать вручную только если хочется поменять иконку:
   python3 tool/make_icons.py
 """
+import json
 import math
 import pathlib
 from PIL import Image, ImageDraw
@@ -12,14 +13,29 @@ OUT = pathlib.Path(__file__).resolve().parent / "icons"
 C1, C2 = (67, 56, 202), (168, 85, 247)  # индиго → фиолетовый
 SS = 4
 
+# Варианты иконки (ключи совпадают с lib/state/app_settings.dart).
+VARIANTS = {
+    "indigo": ((67, 56, 202), (168, 85, 247)),
+    "sunset": ((249, 115, 22), (239, 68, 68)),
+    "mint": ((16, 185, 129), (6, 182, 212)),
+    "ocean": ((59, 130, 246), (14, 165, 233)),
+    "graphite": ((51, 65, 85), (15, 23, 42)),
+}
 
-def gradient(size):
+
+def hexc(c):
+    return "#FF%02X%02X%02X" % c
+
+
+def gradient(size, c1=None, c2=None):
+    c1 = c1 or C1
+    c2 = c2 or C2
     img = Image.new("RGB", (size, size))
     px = img.load()
     for y in range(size):
         for x in range(size):
             t = (x + y) / (2 * size - 2)
-            px[x, y] = tuple(int(C1[i] + (C2[i] - C1[i]) * t) for i in range(3))
+            px[x, y] = tuple(int(c1[i] + (c2[i] - c1[i]) * t) for i in range(3))
     return img
 
 
@@ -44,9 +60,10 @@ def mark(size, scale=1.0, color=(255, 255, 255, 255)):
     return m
 
 
-def render(size, rounded, scale=1.0):
+def render(size, rounded, scale=1.0, colors=None):
     big = size * SS
-    img = gradient(big).convert("RGBA")
+    c1, c2 = colors or (C1, C2)
+    img = gradient(big, c1, c2).convert("RGBA")
     img.alpha_composite(mark(big, scale))
     if rounded:
         mask = Image.new("L", (big, big), 0)
@@ -76,6 +93,37 @@ def main():
                      108, 114, 120, 128, 144, 152, 167, 172, 180, 196, 216, 234, 256, 258, 512, 1024}):
         render(s, rounded=False).convert("RGB").save(ios / f"{s}.png")
     render(512, rounded=True).save(OUT / "preview.png")
+
+    # Альтернативные иконки
+    densities = [("mdpi", 48), ("hdpi", 72), ("xhdpi", 96), ("xxhdpi", 144), ("xxxhdpi", 192)]
+    (a / "drawable").mkdir(parents=True, exist_ok=True)
+    (a / "mipmap-anydpi-v26").mkdir(parents=True, exist_ok=True)
+    alt_ios = OUT / "ios_alt"
+    for key, (c1, c2) in VARIANTS.items():
+        if key == "indigo":
+            continue
+        for name, legacy in densities:
+            render(legacy, rounded=True, colors=(c1, c2)).save(a / f"mipmap-{name}" / f"ic_launcher_{key}.png")
+        (a / "drawable" / f"ic_launcher_background_{key}.xml").write_text(
+            '<?xml version="1.0" encoding="utf-8"?>\n'
+            '<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">\n'
+            f'    <gradient android:type="linear" android:angle="315" android:startColor="{hexc(c1)}" android:endColor="{hexc(c2)}"/>\n'
+            '</shape>\n', encoding="utf-8")
+        (a / "mipmap-anydpi-v26" / f"ic_launcher_{key}.xml").write_text(
+            '<?xml version="1.0" encoding="utf-8"?>\n'
+            '<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">\n'
+            f'    <background android:drawable="@drawable/ic_launcher_background_{key}"/>\n'
+            '    <foreground android:drawable="@mipmap/ic_launcher_foreground"/>\n'
+            '    <monochrome android:drawable="@mipmap/ic_launcher_foreground"/>\n'
+            '</adaptive-icon>\n', encoding="utf-8")
+        d = alt_ios / f"AppIcon-{key.capitalize()}.appiconset"
+        d.mkdir(parents=True, exist_ok=True)
+        render(1024, rounded=False, colors=(c1, c2)).convert("RGB").save(d / "icon.png")
+        (d / "Contents.json").write_text(json.dumps({
+            "images": [{"filename": "icon.png", "idiom": "universal", "platform": "ios", "size": "1024x1024"}],
+            "info": {"author": "xcode", "version": 1},
+        }, indent=2), encoding="utf-8")
+        render(256, rounded=True, colors=(c1, c2)).save(OUT / f"preview_{key}.png")
     print("Иконки готовы:", OUT)
 
 
