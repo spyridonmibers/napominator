@@ -173,21 +173,21 @@ class TodayWidgetProvider : HomeWidgetProvider() {
                 intArrayOf(R.id.s_title0), intArrayOf(R.id.s_check0), null, muted
             )
 
-            // Развёрнутый вид: прогресс + до 5 целей.
+            // Развёрнутый вид: прогресс + до 4 целей (больше Android не даёт по высоте).
             val big = RemoteViews(context.packageName, R.layout.notif_big)
             big.setTextViewText(R.id.n_header, header)
             big.setProgressBar(R.id.n_bar, total, done, false)
             fillRows(
                 context, big, items,
-                intArrayOf(R.id.n_row0, R.id.n_row1, R.id.n_row2, R.id.n_row3, R.id.n_row4),
-                intArrayOf(R.id.n_dot0, R.id.n_dot1, R.id.n_dot2, R.id.n_dot3, R.id.n_dot4),
-                intArrayOf(R.id.n_title0, R.id.n_title1, R.id.n_title2, R.id.n_title3, R.id.n_title4),
-                intArrayOf(R.id.n_check0, R.id.n_check1, R.id.n_check2, R.id.n_check3, R.id.n_check4),
+                intArrayOf(R.id.n_row0, R.id.n_row1, R.id.n_row2, R.id.n_row3),
+                intArrayOf(R.id.n_dot0, R.id.n_dot1, R.id.n_dot2, R.id.n_dot3),
+                intArrayOf(R.id.n_title0, R.id.n_title1, R.id.n_title2, R.id.n_title3),
+                intArrayOf(R.id.n_check0, R.id.n_check1, R.id.n_check2, R.id.n_check3),
                 null, muted
             )
-            if (total > 5) {
+            if (total > 4) {
                 big.setViewVisibility(R.id.n_more, View.VISIBLE)
-                big.setTextViewText(R.id.n_more, "и ещё ${total - 5} — открыть приложение")
+                big.setTextViewText(R.id.n_more, "и ещё ${total - 4} — открыть приложение")
             } else {
                 big.setViewVisibility(R.id.n_more, View.GONE)
             }

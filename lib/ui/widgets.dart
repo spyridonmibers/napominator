@@ -375,3 +375,42 @@ class GoalProgressBar extends StatelessWidget {
     );
   }
 }
+
+/// Круглая кнопка «+» в цвете приложения — рядом с заголовком секции.
+class AddGoalButton extends StatelessWidget {
+  const AddGoalButton({super.key, required this.onTap, this.size = 36});
+  final VoidCallback? onTap;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final pal = brandPalette();
+    return Semantics(
+      button: true,
+      label: 'Новая цель',
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedOpacity(
+          duration: const Duration(milliseconds: 200),
+          opacity: onTap == null ? 0.4 : 1,
+          child: Container(
+            width: size,
+            height: size,
+            decoration: BoxDecoration(
+              gradient: pal.gradient,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: pal.a.withValues(alpha: 0.35),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Icon(Icons.add_rounded, color: Colors.white, size: size * 0.62),
+          ),
+        ),
+      ),
+    );
+  }
+}

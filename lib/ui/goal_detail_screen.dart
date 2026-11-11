@@ -85,7 +85,7 @@ class GoalDetailScreen extends StatelessWidget {
             ],
           ),
           body: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 40),
+            padding: EdgeInsets.fromLTRB(16, 0, 16, 40 + MediaQuery.paddingOf(context).bottom),
             children: [
               Center(child: GoalBadge.of(g, size: 84, dimmed: g.archived)),
               const SizedBox(height: 18),
@@ -335,11 +335,16 @@ class _StatTile extends StatelessWidget {
 }
 
 /// Тепловая карта: столбцы — недели, строки — дни недели.
+/// Сверху подписаны месяцы, слева — все дни недели, внизу — легенда со счётчиками.
 class _Heatmap extends StatelessWidget {
   const _Heatmap({required this.goal});
   final Goal goal;
 
   static const _weeks = 16;
+  static const _monthsShort = [
+    'янв', 'фев', 'мар', 'апр', 'май', 'июн',
+    'июл', 'авг', 'сен', 'окт', 'ноя', 'дек',
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -348,14 +353,19 @@ class _Heatmap extends StatelessWidget {
     final pal = paletteOf(g);
     final t = todayDay();
     final startMonday = addDays(t, -(t.weekday - 1) - (_weeks - 1) * 7);
-    final done = g.completions.toSet();
-    final missed = g.missedLog.toSet();
-    final planned = plannedDates(g, t, addDays(startMonday, _weeks * 7 - 1)).toSet();
+    final endDay = addDays(startMonday, _weeks * 7 - 1);
+    bool inRange(DateTime d) => !d.isBefore(startMonday) && !d.isAfter(endDay);
+    final done = g.completions.where(inRange).toSet();
+    final missed = g.missedLog.where(inRange).toSet()..removeAll(done);
+    final planned = plannedDates(g, t, endDay).toSet()..removeAll(done);
+    final missedColor = th.colorScheme.error.withValues(alpha: 0.75);
+    final plannedColor = pal.main.withValues(alpha: 0.25);
+    final labelStyle = TextStyle(fontSize: 9, color: th.colorScheme.onSurfaceVariant);
 
     Color colorFor(DateTime d) {
       if (done.contains(d)) return pal.main;
-      if (missed.contains(d)) return th.colorScheme.error.withValues(alpha: 0.75);
-      if (planned.contains(d)) return pal.main.withValues(alpha: 0.22);
+      if (missed.contains(d)) return missedColor;
+      if (planned.contains(d)) return plannedColor;
       return AppColors.muted(context);
     }
 
@@ -366,55 +376,79 @@ class _Heatmap extends StatelessWidget {
           builder: (context, c) {
             const gap = 4.0;
             const labelW = 22.0;
-            final cell = ((c.maxWidth - labelW - gap * (_weeks - 1)) / _weeks).clamp(6.0, 22.0).toDouble();
-            return Row(
+            final cell = ((c.maxWidth - labelW - gap * (_weeks - 1)) / _weeks)
+                .clamp(6.0, 22.0)
+                .toDouble();
+            return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Подписи месяцев над первой неделей каждого месяца
                 SizedBox(
-                  width: labelW,
-                  child: Column(
+                  height: 14,
+                  child: Stack(
+                    clipBehavior: Clip.none,
                     children: [
-                      for (var r = 0; r < 7; r++)
-                        SizedBox(
-                          height: cell + gap,
-                          child: Align(
-                            alignment: Alignment.centerLeft,
-                            child: r.isEven
-                                ? Text(weekdayShort[r],
-                                    style: TextStyle(
-                                        fontSize: 9,
-                                        color: th.colorScheme.onSurfaceVariant))
-                                : null,
+                      for (var w = 0; w < _weeks; w++)
+                        if (w == 0 ||
+                            addDays(startMonday, w * 7).month !=
+                                addDays(startMonday, (w - 1) * 7).month)
+                          Positioned(
+                            left: labelW + w * (cell + gap),
+                            top: 0,
+                            child: Text(
+                              _monthsShort[addDays(startMonday, w * 7).month - 1],
+                              style: labelStyle.copyWith(fontWeight: FontWeight.w600),
+                            ),
                           ),
-                        ),
                     ],
                   ),
                 ),
-                for (var w = 0; w < _weeks; w++)
-                  Padding(
-                    padding: EdgeInsets.only(right: w == _weeks - 1 ? 0 : gap),
-                    child: Column(
-                      children: [
-                        for (var r = 0; r < 7; r++)
-                          Builder(builder: (_) {
-                            final d = addDays(startMonday, w * 7 + r);
-                            final isToday = d == t;
-                            return Container(
-                              width: cell,
-                              height: cell,
-                              margin: const EdgeInsets.only(bottom: gap),
-                              decoration: BoxDecoration(
-                                color: colorFor(d),
-                                borderRadius: BorderRadius.circular(cell * 0.28),
-                                border: isToday
-                                    ? Border.all(color: th.colorScheme.onSurface, width: 1.5)
-                                    : null,
+                const SizedBox(height: 4),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(
+                      width: labelW,
+                      child: Column(
+                        children: [
+                          for (var r = 0; r < 7; r++)
+                            SizedBox(
+                              height: cell + gap,
+                              child: Align(
+                                alignment: Alignment.centerLeft,
+                                child: Text(weekdayShort[r], style: labelStyle),
                               ),
-                            );
-                          }),
-                      ],
+                            ),
+                        ],
+                      ),
                     ),
-                  ),
+                    for (var w = 0; w < _weeks; w++)
+                      Padding(
+                        padding: EdgeInsets.only(right: w == _weeks - 1 ? 0 : gap),
+                        child: Column(
+                          children: [
+                            for (var r = 0; r < 7; r++)
+                              Builder(builder: (_) {
+                                final d = addDays(startMonday, w * 7 + r);
+                                final isToday = d == t;
+                                return Container(
+                                  width: cell,
+                                  height: cell,
+                                  margin: const EdgeInsets.only(bottom: gap),
+                                  decoration: BoxDecoration(
+                                    color: d.isAfter(endDay) ? Colors.transparent : colorFor(d),
+                                    borderRadius: BorderRadius.circular(cell * 0.28),
+                                    border: isToday
+                                        ? Border.all(color: th.colorScheme.onSurface, width: 1.5)
+                                        : null,
+                                  ),
+                                );
+                              }),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
               ],
             );
           },
@@ -424,22 +458,28 @@ class _Heatmap extends StatelessWidget {
           spacing: 14,
           runSpacing: 4,
           children: [
-            _legend(context, pal.main, 'выполнено'),
-            _legend(context, th.colorScheme.error.withValues(alpha: 0.75), 'перенос'),
-            _legend(context, pal.main.withValues(alpha: 0.22), 'по плану'),
+            _legend(context, pal.main, 'выполнено ${done.length}'),
+            _legend(context, missedColor,
+                '${g.carry == CarryMode.skip ? 'пропущено' : 'перенос'} ${missed.length}'),
+            _legend(context, plannedColor, 'по плану ${planned.length}'),
+            _legend(context, Colors.transparent, 'сегодня', border: th.colorScheme.onSurface),
           ],
         ),
       ],
     );
   }
 
-  Widget _legend(BuildContext context, Color c, String s) => Row(
+  Widget _legend(BuildContext context, Color c, String s, {Color? border}) => Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
             width: 10,
             height: 10,
-            decoration: BoxDecoration(color: c, borderRadius: BorderRadius.circular(3)),
+            decoration: BoxDecoration(
+              color: c,
+              borderRadius: BorderRadius.circular(3),
+              border: border == null ? null : Border.all(color: border, width: 1.5),
+            ),
           ),
           const SizedBox(width: 5),
           Text(s,

@@ -70,6 +70,12 @@ const goalIcons = <String, IconData>{
   'call': Icons.call_rounded,
   'nophone': Icons.phonelink_erase_rounded,
   'nosmoke': Icons.smoke_free_rounded,
+  'fish': Icons.set_meal_rounded,
+  'health': Icons.health_and_safety_rounded,
+  'soccer': Icons.sports_soccer_rounded,
+  'movie': Icons.movie_rounded,
+  'games': Icons.sports_esports_rounded,
+  'payments': Icons.payments_rounded,
 };
 
 IconData iconOf(Goal g) => goalIcons[g.icon] ?? Icons.track_changes_rounded;

@@ -90,13 +90,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           SettingsScreen(store: store),
         ],
       ),
-      floatingActionButton: _tab == 1 || _tab == 3
-          ? null
-          : FloatingActionButton(
-              onPressed: _add,
-              tooltip: 'Новая цель',
-              child: const Icon(Icons.add_rounded, size: 30),
-            ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _tab,
         onDestinationSelected: (i) => setState(() => _tab = i),

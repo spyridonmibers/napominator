@@ -54,16 +54,23 @@ class _GoalsScreenState extends State<GoalsScreen> {
             children: [
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 4),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                child: Row(
                   children: [
-                    Text('Все цели', style: th.textTheme.displaySmall),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Активных ${store.activeCount} из ${GoalStore.maxGoals}',
-                      style: th.textTheme.bodyLarge
-                          ?.copyWith(color: th.colorScheme.onSurfaceVariant),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Все цели', style: th.textTheme.displaySmall),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Активных ${store.activeCount} из ${GoalStore.maxGoals}',
+                            style: th.textTheme.bodyLarge
+                                ?.copyWith(color: th.colorScheme.onSurfaceVariant),
+                          ),
+                        ],
+                      ),
                     ),
+                    AddGoalButton(onTap: store.canAdd ? widget.onAdd : null, size: 44),
                   ],
                 ),
               ),

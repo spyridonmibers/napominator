@@ -134,12 +134,17 @@ class TodayScreen extends StatelessWidget {
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 120),
                 sliver: SliverList.list(
                   children: [
+                    SectionTitle(
+                      'Нужно сделать',
+                      trailing: AddGoalButton(
+                        onTap: store.canAdd ? onAdd : null,
+                      ),
+                    ),
                     if (total == 0)
                       const _RestCard()
                     else if (due.isEmpty)
                       const _AllDoneCard(),
                     if (due.isNotEmpty) ...[
-                      const SectionTitle('Нужно сделать'),
                       for (final g in due)
                         Padding(
                           padding: const EdgeInsets.only(bottom: 10),
@@ -364,7 +369,7 @@ class _AllDoneCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(top: 16),
+      padding: EdgeInsets.zero,
       child: AppCard(
         gradient: brandPalette().gradient,
         padding: const EdgeInsets.all(20),
@@ -410,7 +415,7 @@ class _RestCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final th = Theme.of(context);
     return Padding(
-      padding: const EdgeInsets.only(top: 16),
+      padding: EdgeInsets.zero,
       child: AppCard(
         padding: const EdgeInsets.all(20),
         child: Row(

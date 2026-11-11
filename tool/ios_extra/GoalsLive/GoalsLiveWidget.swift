@@ -76,7 +76,7 @@ struct GoalRowView: View {
                 .fill(Color(hex: item.color))
                 .frame(width: 10, height: 10)
             Text(item.title)
-                .font(.system(size: 15, weight: .medium))
+                .font(.system(size: 14, weight: .medium))
                 .lineLimit(1)
                 .foregroundStyle(item.done ? Color.white.opacity(0.5) : Color.white)
                 .strikethrough(item.done, color: Color.white.opacity(0.5))
@@ -98,13 +98,18 @@ struct LockScreenView: View {
 
     var body: some View {
         let shown = Array(state.items.prefix(3))
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 10) {
                 ProgressRingView(done: state.done, total: state.total, lineWidth: 4)
                     .frame(width: 28, height: 28)
                 VStack(alignment: .leading, spacing: 0) {
                     Text("Сегодня").font(.system(size: 16, weight: .bold)).foregroundStyle(.white)
-                    Text(headline(state)).font(.system(size: 12)).foregroundStyle(Color.white.opacity(0.7))
+                    Text(state.total > shown.count
+                         ? "\(headline(state)) · ещё \(state.total - shown.count) в приложении"
+                         : headline(state))
+                        .font(.system(size: 12))
+                        .lineLimit(1)
+                        .foregroundStyle(Color.white.opacity(0.7))
                 }
                 Spacer()
                 Text("\(state.done)/\(state.total)")
@@ -114,13 +119,9 @@ struct LockScreenView: View {
             ForEach(shown) { item in
                 GoalRowView(item: item)
             }
-            if state.total > shown.count {
-                Text("и ещё \(state.total - shown.count)")
-                    .font(.system(size: 12))
-                    .foregroundStyle(Color.white.opacity(0.6))
-            }
         }
-        .padding(14)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
     }
 }
 
@@ -149,15 +150,9 @@ struct GoalsLiveActivityWidget: Widget {
                         .padding(.trailing, 4)
                 }
                 DynamicIslandExpandedRegion(.bottom) {
-                    VStack(spacing: 6) {
+                    VStack(spacing: 4) {
                         ForEach(Array(s.items.prefix(3))) { item in
                             GoalRowView(item: item)
-                        }
-                        if s.total > 3 {
-                            Text("и ещё \(s.total - 3)")
-                                .font(.system(size: 12))
-                                .foregroundStyle(Color.white.opacity(0.6))
-                                .frame(maxWidth: .infinity, alignment: .leading)
                         }
                     }
                     .padding(.horizontal, 4)

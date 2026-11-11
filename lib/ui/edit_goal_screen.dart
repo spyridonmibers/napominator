@@ -181,42 +181,42 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
     final key = await showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
+      isScrollControlled: true,
       backgroundColor: AppColors.card(context),
-      builder: (c) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
+      builder: (c) {
+        final th = Theme.of(c);
+        return SizedBox(
+          height: MediaQuery.sizeOf(c).height * 0.6,
+          child: ListView(
+            padding: EdgeInsets.fromLTRB(20, 0, 20, 20 + MediaQuery.paddingOf(c).bottom),
             children: [
-              Text('Иконка', style: Theme.of(c).textTheme.titleLarge),
+              Text('Иконка', style: th.textTheme.titleLarge),
               const SizedBox(height: 16),
               Wrap(
-                spacing: 12,
-                runSpacing: 12,
+                spacing: 10,
+                runSpacing: 10,
                 children: [
                   for (final e in goalIcons.entries)
                     GestureDetector(
                       onTap: () => Navigator.pop(c, e.key),
                       child: e.key == _icon
-                          ? GoalBadge(palette: _palette, icon: e.value, size: 52)
+                          ? GoalBadge(palette: _palette, icon: e.value, size: 50)
                           : Container(
-                              width: 52,
-                              height: 52,
+                              width: 50,
+                              height: 50,
                               decoration: BoxDecoration(
                                 color: AppColors.muted(c),
                                 borderRadius: BorderRadius.circular(16),
                               ),
-                              child: Icon(e.value,
-                                  color: Theme.of(c).colorScheme.onSurfaceVariant),
+                              child: Icon(e.value, color: th.colorScheme.onSurfaceVariant),
                             ),
                     ),
                 ],
               ),
             ],
           ),
-        ),
-      ),
+        );
+      },
     );
     if (key != null) setState(() => _icon = key);
   }
@@ -308,7 +308,8 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
         ),
       ),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+        // Снизу — отступ под системную панель навигации, чтобы кнопка не обрезалась.
+        padding: EdgeInsets.fromLTRB(16, 4, 16, 24 + MediaQuery.paddingOf(context).bottom),
         children: [
           // ---- Внешний вид и название ----
           AppCard(
@@ -470,7 +471,7 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
                 const SizedBox(height: 8),
                 const Divider(),
                 _SettingTile(
-                  icon: Icons.play_circle_outline_rounded,
+                  icon: Icons.event_rounded,
                   title: 'Начало',
                   value: formatRelative(_start),
                   onTap: _pickStart,
