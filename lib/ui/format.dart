@@ -58,6 +58,8 @@ String repeatText(Goal g) {
       return 'Через день';
     case RepeatType.weekdays:
       return weekdaysText(shiftedWeekdays(g));
+    case RepeatType.cycle:
+      return 'График ${g.cycleOn}/${g.cycleOff}';
   }
 }
 

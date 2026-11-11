@@ -1,6 +1,7 @@
 import 'day.dart';
 
-enum RepeatType { daily, everyOtherDay, weekdays }
+/// cycle — свой график «N дней выполнять / M дней отдыха» (2/2, 3/1, 1/2...).
+enum RepeatType { daily, everyOtherDay, weekdays, cycle }
 
 enum DeadlineType { none, date, count }
 
@@ -25,6 +26,8 @@ class Goal {
     this.colorIndex = 0,
     this.icon = 'target',
     this.archived = false,
+    this.cycleOn = 2,
+    this.cycleOff = 2,
     List<DateTime>? missedLog,
   })  : completions = completions ?? <DateTime>[],
         missedLog = missedLog ?? <DateTime>[];
@@ -79,6 +82,10 @@ class Goal {
   /// Дни, когда цель была назначена, но не выполнена.
   List<DateTime> missedLog;
 
+  /// Свой график: сколько дней подряд выполнять и сколько отдыхать.
+  int cycleOn;
+  int cycleOff;
+
   Map<String, dynamic> toJson() => {
         'id': id,
         'notifId': notifId,
@@ -99,6 +106,8 @@ class Goal {
         'colorIndex': colorIndex,
         'icon': icon,
         'archived': archived,
+        'cycleOn': cycleOn,
+        'cycleOff': cycleOff,
         'missedLog': missedLog.map(dayKey).toList(),
       };
 
@@ -127,6 +136,8 @@ class Goal {
         colorIndex: (j['colorIndex'] as num?)?.toInt() ?? 0,
         icon: j['icon'] as String? ?? 'target',
         archived: j['archived'] as bool? ?? false,
+        cycleOn: (j['cycleOn'] as num?)?.toInt() ?? 2,
+        cycleOff: (j['cycleOff'] as num?)?.toInt() ?? 2,
         missedLog: ((j['missedLog'] as List?) ?? const [])
             .map((e) => parseDay(e as String))
             .toList(),

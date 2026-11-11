@@ -19,13 +19,17 @@ bool isPatternDay(Goal g, DateTime day) {
       return daysBetween(g.startDate, base) % 2 == 0;
     case RepeatType.weekdays:
       return g.weekdays.contains(base.weekday);
+    case RepeatType.cycle:
+      final on = g.cycleOn < 1 ? 1 : g.cycleOn;
+      final off = g.cycleOff < 0 ? 0 : g.cycleOff;
+      return daysBetween(g.startDate, base) % (on + off) < on;
   }
 }
 
 /// Первый день графика, начиная с [from] (включительно).
 DateTime nextOccurrence(Goal g, DateTime from) {
   var d = maxDay(from, addDays(g.startDate, g.shift));
-  for (var i = 0; i < 14; i++) {
+  for (var i = 0; i < 70; i++) {
     if (isPatternDay(g, d)) return d;
     d = addDays(d, 1);
   }

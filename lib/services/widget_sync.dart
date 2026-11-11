@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io' show Platform;
 import 'dart:ui' show DartPluginRegistrant;
 
+import 'package:flutter/services.dart';
 import 'package:home_widget/home_widget.dart';
 
 import '../data/goal_repository.dart';
@@ -46,6 +47,29 @@ Future<void> widgetBackgroundCallback(Uri? uri) async {
   } catch (_) {}
 }
 
+/// Live Activity на iPhone (Dynamic Island + экран блокировки).
+class LiveSync {
+  static const _channel = MethodChannel('napominator/live');
+
+  /// [onPending] — пользователь отметил цель в Live Activity, нужно перечитать данные.
+  static void init(void Function() onPending) {
+    if (!Platform.isIOS) return;
+    _channel.setMethodCallHandler((call) async {
+      if (call.method == 'pendingChanged') onPending();
+      return null;
+    });
+  }
+
+  /// true — Live Activity показана/обновлена; false — недоступна; null — ошибка канала.
+  static Future<bool?> push(Map<String, dynamic> state) async {
+    try {
+      return await _channel.invokeMethod<bool>('update', jsonEncode(state));
+    } catch (_) {
+      return null;
+    }
+  }
+}
+
 class WidgetSync {
   static Map<String, dynamic> _item(Goal g, bool done) => {
         'id': g.id,
@@ -54,9 +78,9 @@ class WidgetSync {
         'color': '#${paletteOf(g).main.toARGB32().toRadixString(16).padLeft(8, '0')}',
       };
 
-  /// Сохранить данные для виджета и перерисовать его (только Android).
+  /// Обновить виджет и панель на экране блокировки (Android) или Live Activity (iPhone).
   static Future<void> update(List<Goal> goals) async {
-    if (!Platform.isAndroid) return;
+    if (!Platform.isAndroid && !Platform.isIOS) return;
     try {
       final t = todayDay();
       final tomorrow = addDays(t, 1);
@@ -78,6 +102,18 @@ class WidgetSync {
       });
       next.sort(byTime);
 
+      if (Platform.isIOS) {
+        final doneCount = today.where((g) => doneOn(g, t)).length;
+        final ok = await LiveSync.push({
+          'items': [for (final g in today.take(6)) _item(g, doneOn(g, t))],
+          'done': doneCount,
+          'total': today.length,
+        });
+        if (ok != null) Notifications.instance.useSummary = !ok;
+        return;
+      }
+
+      Notifications.instance.useSummary = false; // на Android — нативная панель
       final data = {
         'date': dayKey(t),
         'today': [for (final g in today) _item(g, doneOn(g, t))],

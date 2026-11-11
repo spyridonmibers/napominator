@@ -13,6 +13,8 @@ Goal make({
   DeadlineType deadline = DeadlineType.none,
   DateTime? end,
   int? count,
+  int on = 2,
+  int off = 2,
 }) {
   final g = Goal(
     id: 't',
@@ -25,6 +27,8 @@ Goal make({
     endDate: end,
     targetCount: count,
     nextDue: mon,
+    cycleOn: on,
+    cycleOff: off,
   );
   initGoal(g, mon);
   return g;
@@ -155,5 +159,23 @@ void main() {
     expect(plannedDates(g, d(0), d(10)), [d(0), d(1), d(2)]);
     final w = make(repeat: RepeatType.everyOtherDay);
     expect(plannedDates(w, d(1), d(6)), [d(2), d(4), d(6)]);
+  });
+
+  test('свой график 2/2 и сдвиг при пропуске', () {
+    final g = make(repeat: RepeatType.cycle, on: 2, off: 2);
+    expect(plannedDates(g, d(0), d(7)), [d(0), d(1), d(4), d(5)]);
+    complete(g, d(0));
+    expect(g.nextDue, d(1));
+    normalize(g, d(2)); // d1 пропущен
+    expect(g.nextDue, d(2));
+    complete(g, d(2));
+    expect(g.nextDue, d(5)); // весь график сдвинулся на день
+  });
+
+  test('свой график 3/1 и 1/2', () {
+    final a = make(repeat: RepeatType.cycle, on: 3, off: 1);
+    expect(plannedDates(a, d(0), d(7)), [d(0), d(1), d(2), d(4), d(5), d(6)]);
+    final b = make(repeat: RepeatType.cycle, on: 1, off: 2);
+    expect(plannedDates(b, d(0), d(7)), [d(0), d(3), d(6)]);
   });
 }

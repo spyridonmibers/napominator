@@ -20,6 +20,15 @@ class GoalStore extends ChangeNotifier {
   int get activeCount => goals.where(isActive).length;
   bool get canAdd => activeCount < maxGoals;
 
+  /// Последовательное выполнение операций, которые перечитывают и сохраняют данные,
+  /// чтобы два параллельных обновления не затёрли друг друга.
+  Future<void> _queue = Future<void>.value();
+  Future<T> _serial<T>(Future<T> Function() task) {
+    final result = _queue.then((_) => task());
+    _queue = result.then<void>((_) {}, onError: (Object _) {});
+    return result;
+  }
+
   int nextNotifId() {
     var m = 0;
     for (final g in goals) {
@@ -29,10 +38,21 @@ class GoalStore extends ChangeNotifier {
   }
 
   /// Перечитать данные, перенести просроченные цели, обновить уведомления.
-  Future<void> refresh() async {
+  Future<void> refresh() => _serial(_refresh);
+
+  Future<void> _refresh() async {
     goals = await _repo.load();
     final t = todayDay();
     var changed = false;
+    // Отметки из Dynamic Island / экрана блокировки iPhone.
+    for (final (id, day) in await _repo.takePendingToggles()) {
+      final g = byId(id);
+      if (g == null) continue;
+      if (doneOn(g, day) ? undoToday(g, day) : complete(g, day)) {
+        changed = true;
+        await Notifications.instance.cancelGoal(g);
+      }
+    }
     for (final g in goals) {
       if (normalize(g, t)) changed = true;
     }
@@ -86,7 +106,9 @@ class GoalStore extends ChangeNotifier {
     await _persist();
   }
 
-  Future<bool> completeById(String id) async {
+  Future<bool> completeById(String id) => _serial(() => _completeById(id));
+
+  Future<bool> _completeById(String id) async {
     // Перечитываем, чтобы не затереть отметку из фонового обработчика.
     goals = await _repo.load();
     final t = todayDay();

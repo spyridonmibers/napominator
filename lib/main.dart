@@ -23,6 +23,7 @@ Future<void> main() async {
       await HomeWidget.registerInteractivityCallback(widgetBackgroundCallback);
     } catch (_) {}
   }
+  LiveSync.init(store.refresh);
   runApp(NapominatorApp(store: store));
   store.refresh();
 }

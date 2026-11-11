@@ -35,6 +35,8 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
   int? _reminder;
   late int _color;
   late String _icon;
+  late int _cycleOn;
+  late int _cycleOff;
   String? _error;
   bool _saving = false;
 
@@ -56,6 +58,8 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
     _reminder = g == null ? 9 * 60 : g.reminderMinutes;
     _color = g?.colorIndex ?? (widget.store.goals.length % goalPalettes.length);
     _icon = g?.icon ?? 'target';
+    _cycleOn = g?.cycleOn ?? 2;
+    _cycleOff = g?.cycleOff ?? 2;
   }
 
   @override
@@ -239,6 +243,8 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
         nextDue: _start,
         colorIndex: _color,
         icon: _icon,
+        cycleOn: _cycleOn,
+        cycleOff: _cycleOff,
       );
       await store.add(g);
     } else {
@@ -246,7 +252,9 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
           old.startDate != _start ||
           (_repeat == RepeatType.weekdays &&
               (old.weekdays.length != _weekdays.length ||
-                  !old.weekdays.containsAll(_weekdays)));
+                  !old.weekdays.containsAll(_weekdays))) ||
+          (_repeat == RepeatType.cycle &&
+              (old.cycleOn != _cycleOn || old.cycleOff != _cycleOff));
       old
         ..title = title
         ..repeat = _repeat
@@ -257,7 +265,9 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
         ..targetCount = count
         ..reminderMinutes = _reminder
         ..colorIndex = _color
-        ..icon = _icon;
+        ..icon = _icon
+        ..cycleOn = _cycleOn
+        ..cycleOff = _cycleOff;
       await store.update(old, patternChanged: patternChanged);
     }
     if (mounted) Navigator.of(context).pop();
@@ -372,39 +382,66 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
                   options: const {
                     RepeatType.daily: 'Каждый день',
                     RepeatType.everyOtherDay: 'Через день',
+                  },
+                  onChanged: (v) => setState(() => _repeat = v),
+                ),
+                const SizedBox(height: 8),
+                _ChoiceRow<RepeatType>(
+                  value: _repeat,
+                  palette: pal,
+                  options: const {
                     RepeatType.weekdays: 'Дни недели',
+                    RepeatType.cycle: 'Свой график',
                   },
                   onChanged: (v) => setState(() => _repeat = v),
                 ),
                 AnimatedSize(
                   duration: const Duration(milliseconds: 220),
                   curve: Curves.easeOutCubic,
-                  child: _repeat != RepeatType.weekdays
-                      ? const SizedBox(width: double.infinity)
-                      : Padding(
-                          padding: const EdgeInsets.only(top: 16),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              for (var w = 1; w <= 7; w++)
-                                _DayToggle(
-                                  label: weekdayShort[w - 1],
-                                  selected: _weekdays.contains(w),
-                                  palette: pal,
-                                  onTap: () => setState(() {
-                                    if (!_weekdays.remove(w)) _weekdays.add(w);
-                                  }),
-                                ),
-                            ],
-                          ),
+                  alignment: Alignment.topCenter,
+                  child: switch (_repeat) {
+                    RepeatType.weekdays => Padding(
+                        padding: const EdgeInsets.only(top: 16),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            for (var w = 1; w <= 7; w++)
+                              _DayToggle(
+                                label: weekdayShort[w - 1],
+                                selected: _weekdays.contains(w),
+                                palette: pal,
+                                onTap: () => setState(() {
+                                  if (!_weekdays.remove(w)) _weekdays.add(w);
+                                }),
+                              ),
+                          ],
                         ),
+                      ),
+                    RepeatType.cycle => Padding(
+                        padding: const EdgeInsets.only(top: 16),
+                        child: _CycleEditor(
+                          on: _cycleOn,
+                          off: _cycleOff,
+                          start: _start,
+                          palette: pal,
+                          onChanged: (on, off) => setState(() {
+                            _cycleOn = on;
+                            _cycleOff = off;
+                          }),
+                        ),
+                      ),
+                    _ => const SizedBox(width: double.infinity),
+                  },
                 ),
-                if (!_isNew && widget.goal!.shift > 0 && widget.goal!.repeat == RepeatType.weekdays)
+                if (!_isNew &&
+                    widget.goal!.shift > 0 &&
+                    (widget.goal!.repeat == RepeatType.weekdays ||
+                        widget.goal!.repeat == RepeatType.cycle))
                   Padding(
                     padding: const EdgeInsets.only(top: 12),
                     child: Text(
                       'Из-за переносов график сейчас сдвинут на ${daysWord(widget.goal!.shift)}. '
-                      'Если поменять дни, сдвиг сбросится.',
+                      'Если поменять расписание, сдвиг сбросится.',
                       style: th.textTheme.bodySmall?.copyWith(color: th.colorScheme.onSurfaceVariant),
                     ),
                   ),
@@ -736,6 +773,178 @@ class _TimePreset extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Редактор своего графика «N через M»: пресеты, счётчики и превью на 14 дней.
+class _CycleEditor extends StatelessWidget {
+  const _CycleEditor({
+    required this.on,
+    required this.off,
+    required this.start,
+    required this.palette,
+    required this.onChanged,
+  });
+
+  final int on;
+  final int off;
+  final DateTime start;
+  final GoalPalette palette;
+  final void Function(int on, int off) onChanged;
+
+  static const _presets = <(int, int)>[(2, 2), (3, 1), (1, 2), (5, 2), (3, 3), (1, 3)];
+  static const _max = 30;
+
+  @override
+  Widget build(BuildContext context) {
+    final th = Theme.of(context);
+    final t = todayDay();
+    final from = start.isAfter(t) ? start : t;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final p in _presets)
+              GestureDetector(
+                onTap: () => onChanged(p.$1, p.$2),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  decoration: BoxDecoration(
+                    gradient: p.$1 == on && p.$2 == off ? palette.gradient : null,
+                    color: p.$1 == on && p.$2 == off ? null : AppColors.muted(context),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    '${p.$1}/${p.$2}',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 15,
+                      color: p.$1 == on && p.$2 == off
+                          ? Colors.white
+                          : th.colorScheme.onSurface,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 14),
+        _Stepper(
+          label: 'Выполнять',
+          value: on,
+          palette: palette,
+          onMinus: on > 1 ? () => onChanged(on - 1, off) : null,
+          onPlus: on < _max ? () => onChanged(on + 1, off) : null,
+        ),
+        const SizedBox(height: 8),
+        _Stepper(
+          label: 'Отдыхать',
+          value: off,
+          palette: palette,
+          onMinus: off > 1 ? () => onChanged(on, off - 1) : null,
+          onPlus: off < _max ? () => onChanged(on, off + 1) : null,
+        ),
+        const SizedBox(height: 14),
+        Text(
+          'Ближайшие 14 дней',
+          style: th.textTheme.labelMedium?.copyWith(color: th.colorScheme.onSurfaceVariant),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            for (var i = 0; i < 14; i++) ...[
+              if (i > 0) const SizedBox(width: 3),
+              Expanded(
+                child: Builder(builder: (_) {
+                  final d = addDays(from, i);
+                  final work = daysBetween(start, d) % (on + off) < on;
+                  return Column(
+                    children: [
+                      AspectRatio(
+                        aspectRatio: 0.7,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            gradient: work ? palette.gradient : null,
+                            color: work ? null : AppColors.muted(context),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        '${d.day}',
+                        style: TextStyle(
+                          fontSize: 9,
+                          fontWeight: d == t ? FontWeight.w800 : FontWeight.w500,
+                          color: d == t ? palette.a : th.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  );
+                }),
+              ),
+            ],
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _Stepper extends StatelessWidget {
+  const _Stepper({
+    required this.label,
+    required this.value,
+    required this.palette,
+    required this.onMinus,
+    required this.onPlus,
+  });
+
+  final String label;
+  final int value;
+  final GoalPalette palette;
+  final VoidCallback? onMinus;
+  final VoidCallback? onPlus;
+
+  @override
+  Widget build(BuildContext context) {
+    final th = Theme.of(context);
+    Widget btn(IconData icon, VoidCallback? onTap) => Material(
+          color: AppColors.muted(context),
+          shape: const CircleBorder(),
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            onTap: onTap,
+            child: SizedBox(
+              width: 38,
+              height: 38,
+              child: Icon(icon,
+                  size: 20,
+                  color: onTap == null
+                      ? th.colorScheme.onSurfaceVariant.withValues(alpha: 0.4)
+                      : th.colorScheme.onSurface),
+            ),
+          ),
+        );
+    return Row(
+      children: [
+        Expanded(child: Text(label, style: th.textTheme.bodyLarge)),
+        btn(Icons.remove_rounded, onMinus),
+        SizedBox(
+          width: 76,
+          child: Text(
+            daysWord(value),
+            textAlign: TextAlign.center,
+            style: th.textTheme.titleMedium?.copyWith(color: palette.a, fontWeight: FontWeight.w800),
+          ),
+        ),
+        btn(Icons.add_rounded, onPlus),
+      ],
     );
   }
 }

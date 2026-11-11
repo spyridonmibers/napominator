@@ -54,6 +54,8 @@ WIDGET = """
             android:label="@string/widget_label">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
             <meta-data android:name="android.appwidget.provider"
                 android:resource="@xml/today_widget_info" />
@@ -125,11 +127,31 @@ if "flutter_local_notifications" not in d:
         errors.append("AppDelegate.swift: не найден didFinishLaunchingWithOptions")
     write(delegate, d)
 
+# ---------------- iOS: Live Activity ----------------
+d = read(delegate)
+if "LiveGoalsPlugin" not in d:
+    patterns = [
+        (r"GeneratedPluginRegistrant\.register\(with: self\)",
+         'LiveGoalsPlugin.register(with: self.registrar(forPlugin: "LiveGoalsPlugin")!)'),
+        (r"GeneratedPluginRegistrant\.register\(with: engineBridge\.pluginRegistry\)",
+         'LiveGoalsPlugin.register(with: engineBridge.pluginRegistry.registrar(forPlugin: "LiveGoalsPlugin")!)'),
+    ]
+    for pat, line in patterns:
+        d, n = re.subn(pat, lambda x, line=line: x.group(0) + "\n    " + line, d, count=1)
+        if n:
+            break
+    else:
+        errors.append("AppDelegate.swift: не найдено место для LiveGoalsPlugin")
+    write(delegate, d)
+
 # ---------------- iOS: имя приложения ----------------
 plist = ROOT / "ios/Runner/Info.plist"
 p = read(plist)
 p = re.sub(r"(<key>CFBundleDisplayName</key>\s*<string>)[^<]*(</string>)",
            lambda x: x.group(1) + APP_NAME + x.group(2), p, count=1)
+if "NSSupportsLiveActivities" not in p:
+    idx = p.rfind("</dict>")
+    p = p[:idx] + "\t<key>NSSupportsLiveActivities</key>\n\t<true/>\n" + p[idx:]
 write(plist, p)
 
 # ---------------- iOS: иконка ----------------

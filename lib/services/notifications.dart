@@ -73,6 +73,10 @@ class Notifications {
 
   final _plugin = FlutterLocalNotificationsPlugin();
   bool _initialized = false;
+
+  /// Показывать сводку через этот плагин. На Android её заменяет нативная панель,
+  /// на iPhone — Live Activity (если она доступна).
+  bool useSummary = true;
   void Function(String goalId)? _onDone;
 
   bool get _isIOS => Platform.isIOS;
@@ -315,6 +319,10 @@ class Notifications {
 
   /// Показать/обновить постоянную сводку и запланировать сводку на завтра.
   Future<void> _updateSummary(List<Goal> goals, AndroidScheduleMode mode) async {
+    if (!useSummary) {
+      await _plugin.cancel(summaryId);
+      return;
+    }
     final now = DateTime.now();
     final t = dayOf(now);
     final tomorrow = addDays(t, 1);
