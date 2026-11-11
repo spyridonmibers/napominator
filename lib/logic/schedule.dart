@@ -39,9 +39,12 @@ DateTime? effectiveEndDate(Goal g) =>
 
 /// Переносит просроченную цель на [today]. Возвращает true, если что-то изменилось.
 bool normalize(Goal g, DateTime today) {
-  if (g.finished) return false;
+  if (g.finished || g.archived) return false;
   if (g.nextDue.isBefore(today)) {
     final diff = daysBetween(g.nextDue, today);
+    for (var i = 0; i < diff; i++) {
+      g.missedLog.add(addDays(g.nextDue, i));
+    }
     g.shift += diff;
     g.missedDays += diff;
     g.nextDue = today;
@@ -50,7 +53,10 @@ bool normalize(Goal g, DateTime today) {
   return false;
 }
 
-bool isDueToday(Goal g, DateTime today) => !g.finished && g.nextDue == today;
+bool isDueToday(Goal g, DateTime today) =>
+    !g.finished && !g.archived && g.nextDue == today;
+
+bool isActive(Goal g) => !g.finished && !g.archived;
 
 void _updateFinished(Goal g, DateTime today) {
   bool fin;
@@ -69,7 +75,9 @@ void _updateFinished(Goal g, DateTime today) {
 /// Отметить выполнение за сегодня.
 bool complete(Goal g, DateTime today) {
   normalize(g, today);
-  if (g.finished || g.nextDue != today || doneOn(g, today)) return false;
+  if (g.finished || g.archived || g.nextDue != today || doneOn(g, today)) {
+    return false;
+  }
   g.completions.add(today);
   g.completions.sort();
   g.nextDue = nextOccurrence(g, addDays(today, 1));
@@ -92,6 +100,7 @@ void initGoal(Goal g, DateTime today) {
   g.shift = 0;
   g.missedDays = 0;
   g.completions.clear();
+  g.missedLog.clear();
   g.nextDue = nextOccurrence(g, maxDay(g.startDate, today));
   _updateFinished(g, today);
 }
@@ -151,3 +160,48 @@ DateTime? projectedEnd(Goal g) {
 /// Текущие (с учётом сдвига) дни недели.
 Set<int> shiftedWeekdays(Goal g) =>
     g.weekdays.map((w) => ((w - 1 + g.shift) % 7) + 1).toSet();
+
+/// Сколько выполнений подряд с последнего пропуска.
+int currentStreak(Goal g) {
+  if (g.missedLog.isEmpty) return g.completions.length;
+  var lastMiss = g.missedLog.first;
+  for (final m in g.missedLog) {
+    if (m.isAfter(lastMiss)) lastMiss = m;
+  }
+  return g.completions.where((c) => c.isAfter(lastMiss)).length;
+}
+
+/// Лучшая серия выполнений без пропусков.
+int bestStreak(Goal g) {
+  final events = <MapEntry<DateTime, bool>>[
+    for (final c in g.completions) MapEntry(c, true),
+    for (final m in g.missedLog) MapEntry(m, false),
+  ]..sort((a, b) => a.key.compareTo(b.key));
+  var best = 0, cur = 0;
+  for (final e in events) {
+    if (e.value) {
+      cur++;
+      if (cur > best) best = cur;
+    } else {
+      cur = 0;
+    }
+  }
+  return best;
+}
+
+/// Плановые дни выполнения в диапазоне [from]..[to] (если не будет пропусков).
+List<DateTime> plannedDates(Goal g, DateTime from, DateTime to) {
+  if (!isActive(g)) return const <DateTime>[];
+  final res = <DateTime>[];
+  var left = remainingCount(g);
+  var d = g.nextDue;
+  var guard = 0;
+  while (!d.isAfter(to) && guard < 2000) {
+    if (left != null && left <= 0) break;
+    if (!d.isBefore(from)) res.add(d);
+    if (left != null) left--;
+    d = nextOccurrence(g, addDays(d, 1));
+    guard++;
+  }
+  return res;
+}

@@ -4,6 +4,15 @@ import '../models/goal.dart';
 
 const weekdayShort = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 
+const weekdayFull = [
+  'понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота', 'воскресенье',
+];
+
+const monthsNom = [
+  'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
+  'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь',
+];
+
 const _monthsGen = [
   'января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
   'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря',
@@ -75,4 +84,18 @@ double? progress(Goal g) {
   if (left == null) return null;
   final total = done + left;
   return total == 0 ? 0 : done / total;
+}
+
+String capitalize(String s) =>
+    s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
+
+/// «Среда, 11 ноября»
+String formatDateLong(DateTime d) =>
+    '${capitalize(weekdayFull[d.weekday - 1])}, ${d.day} ${_monthsGen[d.month - 1]}';
+
+/// Строка «Каждый день · 09:00».
+String scheduleLine(Goal g) {
+  final r = repeatText(g);
+  final m = g.reminderMinutes;
+  return m == null ? r : '$r · ${formatTime(m)}';
 }

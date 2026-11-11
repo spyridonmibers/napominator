@@ -126,4 +126,34 @@ void main() {
     final g2 = Goal.fromJson(g.toJson());
     expect(g2.toJson(), g.toJson());
   });
+
+  test('журнал пропусков и серии', () {
+    final g = make();
+    complete(g, d(0));
+    complete(g, d(1));
+    normalize(g, d(4)); // пропущены d2, d3
+    expect(g.missedLog, [d(2), d(3)]);
+    expect(currentStreak(g), 0);
+    complete(g, d(4));
+    expect(currentStreak(g), 1);
+    expect(bestStreak(g), 2);
+  });
+
+  test('архив: нет переносов и отметок', () {
+    final g = make();
+    g.archived = true;
+    expect(normalize(g, d(5)), isFalse);
+    expect(complete(g, d(0)), isFalse);
+    g.archived = false;
+    applyEdit(g, d(5), patternChanged: false);
+    expect(g.nextDue, d(5));
+    expect(g.missedDays, 0);
+  });
+
+  test('плановые даты учитывают срок', () {
+    final g = make(deadline: DeadlineType.count, count: 3);
+    expect(plannedDates(g, d(0), d(10)), [d(0), d(1), d(2)]);
+    final w = make(repeat: RepeatType.everyOtherDay);
+    expect(plannedDates(w, d(1), d(6)), [d(2), d(4), d(6)]);
+  });
 }

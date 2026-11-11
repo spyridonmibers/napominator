@@ -7,13 +7,17 @@ import '../models/goal.dart';
 import '../services/notifications.dart';
 
 class GoalStore extends ChangeNotifier {
+  /// Максимум активных целей.
   static const maxGoals = 50;
 
   final _repo = GoalRepository();
   List<Goal> goals = <Goal>[];
   bool loaded = false;
 
-  bool get canAdd => goals.length < maxGoals;
+  List<Goal> get active => goals.where(isActive).toList();
+  List<Goal> get archive => goals.where((g) => !isActive(g)).toList();
+  int get activeCount => goals.where(isActive).length;
+  bool get canAdd => activeCount < maxGoals;
 
   int nextNotifId() {
     var m = 0;
@@ -69,12 +73,26 @@ class GoalStore extends ChangeNotifier {
     await _persist();
   }
 
+  Future<void> setArchived(Goal g, bool value) async {
+    if (!value && !g.finished && !canAdd) return;
+    g.archived = value;
+    if (!value) {
+      applyEdit(g, todayDay(), patternChanged: false);
+    }
+    await Notifications.instance.cancelGoal(g);
+    await _persist();
+  }
+
   Future<bool> completeById(String id) async {
     // Перечитываем, чтобы не затереть отметку из фонового обработчика.
     goals = await _repo.load();
+    final t = todayDay();
+    for (final g in goals) {
+      normalize(g, t);
+    }
     final g = byId(id);
     if (g == null) return false;
-    final ok = complete(g, todayDay());
+    final ok = complete(g, t);
     if (ok) await Notifications.instance.cancelGoal(g);
     await _persist();
     return ok;

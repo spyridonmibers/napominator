@@ -22,7 +22,12 @@ class Goal {
     List<DateTime>? completions,
     this.finished = false,
     this.finishedOn,
-  }) : completions = completions ?? <DateTime>[];
+    this.colorIndex = 0,
+    this.icon = 'target',
+    this.archived = false,
+    List<DateTime>? missedLog,
+  })  : completions = completions ?? <DateTime>[],
+        missedLog = missedLog ?? <DateTime>[];
 
   final String id;
 
@@ -62,6 +67,18 @@ class Goal {
   bool finished;
   DateTime? finishedOn;
 
+  /// Индекс цвета из палитры (см. ui/theme.dart).
+  int colorIndex;
+
+  /// Ключ иконки (см. ui/theme.dart).
+  String icon;
+
+  /// Отложена пользователем (в архиве, без напоминаний и переносов).
+  bool archived;
+
+  /// Дни, когда цель была назначена, но не выполнена.
+  List<DateTime> missedLog;
+
   Map<String, dynamic> toJson() => {
         'id': id,
         'notifId': notifId,
@@ -79,6 +96,10 @@ class Goal {
         'completions': completions.map(dayKey).toList(),
         'finished': finished,
         'finishedOn': finishedOn == null ? null : dayKey(finishedOn!),
+        'colorIndex': colorIndex,
+        'icon': icon,
+        'archived': archived,
+        'missedLog': missedLog.map(dayKey).toList(),
       };
 
   factory Goal.fromJson(Map<String, dynamic> j) => Goal(
@@ -103,5 +124,11 @@ class Goal {
         finished: j['finished'] as bool? ?? false,
         finishedOn:
             j['finishedOn'] == null ? null : parseDay(j['finishedOn'] as String),
+        colorIndex: (j['colorIndex'] as num?)?.toInt() ?? 0,
+        icon: j['icon'] as String? ?? 'target',
+        archived: j['archived'] as bool? ?? false,
+        missedLog: ((j['missedLog'] as List?) ?? const [])
+            .map((e) => parseDay(e as String))
+            .toList(),
       );
 }

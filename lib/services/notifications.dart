@@ -188,7 +188,7 @@ class Notifications {
 
     for (final g in goals) {
       final minutes = g.reminderMinutes;
-      if (g.finished || minutes == null) continue;
+      if (!isActive(g) || minutes == null) continue;
       final h = minutes ~/ 60, m = minutes % 60;
       for (var d = 0; d < _daysAhead; d++) {
         final day = addDays(t, d);
