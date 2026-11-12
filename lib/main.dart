@@ -56,8 +56,10 @@ class NapominatorApp extends StatelessWidget {
         GlobalCupertinoLocalizations.delegate,
       ],
       themeMode: settings.themeMode,
-      theme: buildTheme(Brightness.light, accent: settings.accent),
-      darkTheme: buildTheme(Brightness.dark, accent: settings.accent),
+      theme: buildTheme(Brightness.light,
+          accent: settings.accent, accentCustom: settings.accentCustom),
+      darkTheme: buildTheme(Brightness.dark,
+          accent: settings.accent, accentCustom: settings.accentCustom),
       home: HomeScreen(store: store, alarms: alarms),
       ),
     );

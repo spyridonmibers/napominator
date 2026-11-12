@@ -20,6 +20,7 @@ class AlarmItem {
     this.ramp = true,
     this.snoozeMinutes = 10,
     this.colorIndex = 0,
+    this.customColor,
   }) : weekdays = weekdays ?? <int>{1, 2, 3, 4, 5};
 
   final String id;
@@ -49,6 +50,9 @@ class AlarmItem {
   int snoozeMinutes;
   int colorIndex;
 
+  /// Свой цвет (ARGB), если выбран не из палитры.
+  int? customColor;
+
   Map<String, dynamic> toJson() => {
         'id': id,
         'nativeId': nativeId,
@@ -66,6 +70,7 @@ class AlarmItem {
         'ramp': ramp,
         'snoozeMinutes': snoozeMinutes,
         'colorIndex': colorIndex,
+        'customColor': customColor,
       };
 
   factory AlarmItem.fromJson(Map<String, dynamic> j) => AlarmItem(
@@ -87,6 +92,7 @@ class AlarmItem {
         ramp: j['ramp'] as bool? ?? true,
         snoozeMinutes: (j['snoozeMinutes'] as num?)?.toInt() ?? 10,
         colorIndex: (j['colorIndex'] as num?)?.toInt() ?? 0,
+        customColor: (j['customColor'] as num?)?.toInt(),
       );
 }
 

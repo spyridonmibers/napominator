@@ -57,6 +57,21 @@ class TodayWidgetProvider : HomeWidgetProvider() {
             }
         }
 
+        /** Своё оформление виджета из настроек приложения (null — как тема телефона). */
+        data class WidgetStyle(val bg: Int, val text: Int, val muted: Int)
+
+        fun readStyle(prefs: SharedPreferences): WidgetStyle? = try {
+            val raw = prefs.getString("today_json", null)
+            val st = if (raw == null) null else JSONObject(raw).optJSONObject("style")
+            if (st == null) null else WidgetStyle(
+                parseColor(st.optString("bg", "#FFFFFFFF")),
+                parseColor(st.optString("text", "#FF16161D")),
+                parseColor(st.optString("muted", "#998A8A99")),
+            )
+        } catch (e: Exception) {
+            null
+        }
+
         /** Включена ли панель на экране блокировки (настройка в приложении). */
         fun panelEnabled(prefs: SharedPreferences): Boolean = try {
             val raw = prefs.getString("today_json", null)
@@ -274,11 +289,21 @@ class TodayWidgetProvider : HomeWidgetProvider() {
         val items = readItems(widgetData)
         val total = items.length()
         val done = countDone(items)
-        val textColor = context.getColor(R.color.widget_text)
-        val mutedColor = context.getColor(R.color.widget_muted)
+        val style = readStyle(widgetData)
+        val bgColor = style?.bg ?: context.getColor(R.color.widget_bg)
+        val textColor = style?.text ?: context.getColor(R.color.widget_text)
+        val mutedColor = style?.muted ?: context.getColor(R.color.widget_muted)
+        val accentColor = if (style != null) textColor else context.getColor(R.color.widget_accent)
 
         for (widgetId in appWidgetIds) {
             val views = RemoteViews(context.packageName, R.layout.today_widget)
+            // Фон: цвет без прозрачности + отдельно прозрачность картинки
+            views.setInt(R.id.w_bg, "setColorFilter", bgColor or 0xFF000000.toInt())
+            views.setInt(R.id.w_bg, "setImageAlpha", Color.alpha(bgColor))
+            views.setTextColor(R.id.w_title, textColor)
+            views.setTextColor(R.id.w_progress, accentColor)
+            views.setTextColor(R.id.w_more, mutedColor)
+            views.setTextColor(R.id.w_empty, mutedColor)
             views.setOnClickPendingIntent(
                 R.id.w_root,
                 HomeWidgetLaunchIntent.getActivity(context, MainActivity::class.java)

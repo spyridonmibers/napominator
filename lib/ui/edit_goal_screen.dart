@@ -4,6 +4,7 @@ import '../models/day.dart';
 import '../models/goal.dart';
 import '../state/app_settings.dart';
 import '../state/goal_store.dart';
+import 'color_picker.dart';
 import 'format.dart';
 import 'schedule_picker.dart';
 import 'settings_screen.dart' show CarryPicker;
@@ -36,6 +37,7 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
   late DateTime _end;
   int? _reminder;
   late int _color;
+  int? _customColor;
   late String _icon;
   late int _cycleOn;
   late int _cycleOff;
@@ -61,6 +63,7 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
     _reminder = g == null ? 9 * 60 : g.reminderMinutes;
     _color = g?.colorIndex ?? (widget.store.goals.length % goalPalettes.length);
     _icon = g?.icon ?? 'target';
+    _customColor = g?.customColor;
     _cycleOn = g?.cycleOn ?? 2;
     _cycleOff = g?.cycleOff ?? 2;
     _carry = g?.carry ?? AppSettings.instance.defaultCarry;
@@ -73,7 +76,9 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
     super.dispose();
   }
 
-  GoalPalette get _palette => goalPalettes[_color % goalPalettes.length];
+  GoalPalette get _palette => _customColor != null
+      ? paletteFromColor(Color(_customColor!))
+      : goalPalettes[_color % goalPalettes.length];
 
   Future<void> _pickStart() async {
     final t = todayDay();
@@ -118,33 +123,45 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
       builder: (c) {
         final th = Theme.of(c);
         return SizedBox(
-          height: MediaQuery.sizeOf(c).height * 0.6,
+          height: MediaQuery.sizeOf(c).height * 0.8,
           child: ListView(
             padding: EdgeInsets.fromLTRB(20, 0, 20, 20 + MediaQuery.paddingOf(c).bottom),
             children: [
               Text('Иконка', style: th.textTheme.titleLarge),
-              const SizedBox(height: 16),
-              Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: [
-                  for (final e in goalIcons.entries)
-                    GestureDetector(
-                      onTap: () => Navigator.pop(c, e.key),
-                      child: e.key == _icon
-                          ? GoalBadge(palette: _palette, icon: e.value, size: 50)
-                          : Container(
-                              width: 50,
-                              height: 50,
-                              decoration: BoxDecoration(
-                                color: AppColors.muted(c),
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                              child: Icon(e.value, color: th.colorScheme.onSurfaceVariant),
-                            ),
+              for (final (group, keys) in goalIconGroups) ...[
+                Padding(
+                  padding: const EdgeInsets.only(top: 18, bottom: 10),
+                  child: Text(
+                    group.toUpperCase(),
+                    style: th.textTheme.labelMedium?.copyWith(
+                      letterSpacing: 1.1,
+                      fontWeight: FontWeight.w700,
+                      color: th.colorScheme.onSurfaceVariant,
                     ),
-                ],
-              ),
+                  ),
+                ),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: [
+                    for (final k in keys)
+                      GestureDetector(
+                        onTap: () => Navigator.pop(c, k),
+                        child: k == _icon
+                            ? GoalBadge(palette: _palette, icon: goalIcons[k]!, size: 50)
+                            : Container(
+                                width: 50,
+                                height: 50,
+                                decoration: BoxDecoration(
+                                  color: AppColors.muted(c),
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                child: Icon(goalIcons[k], color: th.colorScheme.onSurfaceVariant),
+                              ),
+                      ),
+                  ],
+                ),
+              ],
             ],
           ),
         );
@@ -194,6 +211,7 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
         reminderMinutes: _reminder,
         nextDue: _start,
         colorIndex: _color,
+        customColor: _customColor,
         icon: _icon,
         cycleOn: _cycleOn,
         cycleOff: _cycleOff,
@@ -218,6 +236,7 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
         ..targetCount = count
         ..reminderMinutes = _reminder
         ..colorIndex = _color
+        ..customColor = _customColor
         ..icon = _icon
         ..cycleOn = _cycleOn
         ..cycleOff = _cycleOff
@@ -285,41 +304,14 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                SizedBox(
-                  height: 36,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: goalPalettes.length,
-                    separatorBuilder: (_, __) => const SizedBox(width: 10),
-                    itemBuilder: (_, i) {
-                      final selected = i == _color;
-                      return GestureDetector(
-                        onTap: () => setState(() => _color = i),
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          width: 36,
-                          height: 36,
-                          padding: const EdgeInsets.all(3),
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: selected ? goalPalettes[i].a : Colors.transparent,
-                              width: 2,
-                            ),
-                          ),
-                          child: Container(
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              gradient: goalPalettes[i].gradient,
-                            ),
-                            child: selected
-                                ? const Icon(Icons.check_rounded, color: Colors.white, size: 16)
-                                : null,
-                          ),
-                        ),
-                      );
-                    },
-                  ),
+                ColorRow(
+                  index: _color,
+                  custom: _customColor,
+                  onPreset: (i) => setState(() {
+                    _color = i;
+                    _customColor = null;
+                  }),
+                  onCustom: (c) => setState(() => _customColor = c),
                 ),
               ],
             ),

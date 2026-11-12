@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../models/goal.dart';
 import '../state/app_settings.dart';
 import '../state/goal_store.dart';
+import 'color_picker.dart';
 import 'theme.dart';
 import 'widgets.dart';
 
@@ -89,37 +90,12 @@ class SettingsScreen extends StatelessWidget {
                   const SizedBox(height: 18),
                   Text('Акцентный цвет', style: th.textTheme.titleSmall),
                   const SizedBox(height: 10),
-                  Wrap(
-                    spacing: 10,
-                    runSpacing: 10,
-                    children: [
-                      for (var i = 0; i < goalPalettes.length; i++)
-                        GestureDetector(
-                          onTap: () => s.setAccent(i),
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 200),
-                            width: 40,
-                            height: 40,
-                            padding: const EdgeInsets.all(3),
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: s.accent == i ? goalPalettes[i].a : Colors.transparent,
-                                width: 2,
-                              ),
-                            ),
-                            child: Container(
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                gradient: goalPalettes[i].gradient,
-                              ),
-                              child: s.accent == i
-                                  ? const Icon(Icons.check_rounded, color: Colors.white, size: 18)
-                                  : null,
-                            ),
-                          ),
-                        ),
-                    ],
+                  ColorRow(
+                    index: s.accent,
+                    custom: s.accentCustom,
+                    size: 40,
+                    onPreset: s.setAccent,
+                    onCustom: s.setAccentCustom,
                   ),
                 ],
               ),
@@ -230,6 +206,11 @@ class SettingsScreen extends StatelessWidget {
                 ],
               ),
             ),
+
+            if (Platform.isAndroid) ...[
+              const SectionTitle('Виджет на рабочем столе'),
+              _WidgetStyleCard(store: store),
+            ],
 
             const SizedBox(height: 28),
             Center(
@@ -435,4 +416,174 @@ class _MarkPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_MarkPainter oldDelegate) => false;
+}
+
+/// Оформление Android-виджета: прозрачность, оттенок, пастельный ↔ тёмный. С живым превью.
+class _WidgetStyleCard extends StatefulWidget {
+  const _WidgetStyleCard({required this.store});
+  final GoalStore store;
+
+  @override
+  State<_WidgetStyleCard> createState() => _WidgetStyleCardState();
+}
+
+class _WidgetStyleCardState extends State<_WidgetStyleCard> {
+  final s = AppSettings.instance;
+  late bool _custom = s.widgetCustom;
+  late double _hue = s.widgetHue;
+  late double _tone = s.widgetTone;
+  late double _opacity = s.widgetOpacity;
+
+  Future<void> _commit() async {
+    await s.setWidgetStyle(custom: _custom, hue: _hue, tone: _tone, opacity: _opacity);
+    await widget.store.refresh(); // перерисует виджет
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final th = Theme.of(context);
+    final base = _custom ? toneColor(_hue, _tone) : AppColors.card(context);
+    final bg = _custom ? base.withValues(alpha: _opacity) : base;
+    final dark = base.computeLuminance() < 0.45;
+    final text = _custom ? (dark ? Colors.white : const Color(0xFF16161D)) : th.colorScheme.onSurface;
+    final muted = text.withValues(alpha: 0.6);
+
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Превью на «обоях»
+          ClipRRect(
+            borderRadius: BorderRadius.circular(18),
+            child: Container(
+              padding: const EdgeInsets.all(18),
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Color(0xFF0EA5E9), Color(0xFF6366F1), Color(0xFFF472B6)],
+                ),
+              ),
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(14, 12, 10, 8),
+                decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(20)),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text('Сегодня',
+                              style: TextStyle(color: text, fontSize: 16, fontWeight: FontWeight.w800)),
+                        ),
+                        Text('2 из 4',
+                            style: TextStyle(color: text, fontSize: 13, fontWeight: FontWeight.w700)),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(3),
+                      child: LinearProgressIndicator(
+                        value: 0.5,
+                        minHeight: 5,
+                        backgroundColor: text.withValues(alpha: 0.15),
+                        valueColor: const AlwaysStoppedAnimation(Color(0xFF8B5CF6)),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    for (final (title, done, color) in const [
+                      ('Зарядка', true, Color(0xFF22C55E)),
+                      ('Английский', true, Color(0xFF6366F1)),
+                      ('Прочитать 20 страниц', false, Color(0xFFF97316)),
+                    ])
+                      SizedBox(
+                        height: 30,
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 10,
+                              height: 10,
+                              decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(3)),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(title,
+                                  style: TextStyle(color: done ? muted : text, fontSize: 14)),
+                            ),
+                            Icon(done ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+                                color: done ? color : muted, size: 22),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(child: Text('Своё оформление', style: th.textTheme.bodyLarge)),
+              Switch(
+                value: _custom,
+                onChanged: (v) {
+                  setState(() => _custom = v);
+                  _commit();
+                },
+              ),
+            ],
+          ),
+          if (!_custom)
+            Text('Сейчас виджет повторяет светлую или тёмную тему телефона.',
+                style: th.textTheme.bodySmall?.copyWith(color: th.colorScheme.onSurfaceVariant))
+          else ...[
+            const SizedBox(height: 4),
+            Text('Цвет', style: th.textTheme.labelLarge),
+            const SizedBox(height: 6),
+            GradientSlider(
+              value: _hue / 360,
+              colors: rainbow,
+              thumbColor: toneColor(_hue, 0.5),
+              onChanged: (v) => setState(() => _hue = v * 360),
+              onChangeEnd: (_) => _commit(),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Text('Пастельный', style: th.textTheme.labelLarge),
+                const Spacer(),
+                Text('Тёмный', style: th.textTheme.labelLarge),
+              ],
+            ),
+            const SizedBox(height: 6),
+            GradientSlider(
+              value: _tone,
+              colors: toneScale(_hue),
+              thumbColor: base,
+              onChanged: (v) => setState(() => _tone = v),
+              onChangeEnd: (_) => _commit(),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Text('Прозрачность', style: th.textTheme.labelLarge),
+                const Spacer(),
+                Text('${((1 - _opacity) * 100).round()}%', style: th.textTheme.labelLarge),
+              ],
+            ),
+            const SizedBox(height: 6),
+            GradientSlider(
+              // слева непрозрачный, справа полностью прозрачный
+              value: 1 - _opacity,
+              colors: [base, base.withValues(alpha: 0)],
+              checkerboard: true,
+              thumbColor: bg,
+              onChanged: (v) => setState(() => _opacity = 1 - v),
+              onChangeEnd: (_) => _commit(),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
 }

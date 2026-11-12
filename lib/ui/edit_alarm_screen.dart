@@ -7,6 +7,7 @@ import '../models/day.dart';
 import '../models/goal.dart' show RepeatType;
 import '../services/alarm_bridge.dart';
 import '../state/alarm_store.dart';
+import 'color_picker.dart';
 import 'format.dart';
 import 'schedule_picker.dart';
 import 'theme.dart';
@@ -35,10 +36,13 @@ class _EditAlarmScreenState extends State<EditAlarmScreen> {
   late bool _ramp;
   late int _snooze;
   late int _color;
+  int? _customColor;
   String? _error;
 
   bool get _isNew => widget.alarm == null;
-  GoalPalette get _pal => goalPalettes[_color % goalPalettes.length];
+  GoalPalette get _pal => _customColor != null
+      ? paletteFromColor(Color(_customColor!))
+      : goalPalettes[_color % goalPalettes.length];
 
   @override
   void initState() {
@@ -59,6 +63,7 @@ class _EditAlarmScreenState extends State<EditAlarmScreen> {
     _ramp = a?.ramp ?? true;
     _snooze = a?.snoozeMinutes ?? 10;
     _color = a?.colorIndex ?? (widget.store.alarms.length % goalPalettes.length);
+    _customColor = a?.customColor;
   }
 
   @override
@@ -128,6 +133,7 @@ class _EditAlarmScreenState extends State<EditAlarmScreen> {
         ramp: _ramp,
         snoozeMinutes: _snooze,
         colorIndex: _color,
+        customColor: _customColor,
       ));
     } else {
       old
@@ -144,6 +150,7 @@ class _EditAlarmScreenState extends State<EditAlarmScreen> {
         ..ramp = _ramp
         ..snoozeMinutes = _snooze
         ..colorIndex = _color
+        ..customColor = _customColor
         ..enabled = true;
       await store.update(old);
     }
@@ -252,37 +259,14 @@ class _EditAlarmScreenState extends State<EditAlarmScreen> {
                   ),
                 ),
                 const SizedBox(height: 14),
-                SizedBox(
-                  height: 36,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: goalPalettes.length,
-                    separatorBuilder: (_, __) => const SizedBox(width: 10),
-                    itemBuilder: (_, i) => GestureDetector(
-                      onTap: () => setState(() => _color = i),
-                      child: Container(
-                        width: 36,
-                        height: 36,
-                        padding: const EdgeInsets.all(3),
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: i == _color ? goalPalettes[i].a : Colors.transparent,
-                            width: 2,
-                          ),
-                        ),
-                        child: Container(
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            gradient: goalPalettes[i].gradient,
-                          ),
-                          child: i == _color
-                              ? const Icon(Icons.check_rounded, color: Colors.white, size: 16)
-                              : null,
-                        ),
-                      ),
-                    ),
-                  ),
+                ColorRow(
+                  index: _color,
+                  custom: _customColor,
+                  onPreset: (i) => setState(() {
+                    _color = i;
+                    _customColor = null;
+                  }),
+                  onCustom: (c) => setState(() => _customColor = c),
                 ),
               ],
             ),

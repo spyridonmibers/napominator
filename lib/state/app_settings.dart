@@ -37,6 +37,12 @@ class AppSettings extends ChangeNotifier {
   static const _kTime = 'settings_time';
   static const _kCarry = 'settings_carry';
   static const kLockScreen = 'settings_lock'; // читается и в фоне (widget_sync)
+  static const _kAccentCustom = 'settings_accent_custom';
+  // Оформление виджета — читается и в фоне (widget_sync)
+  static const kWidgetCustom = 'settings_widget_custom';
+  static const kWidgetHue = 'settings_widget_hue';
+  static const kWidgetTone = 'settings_widget_tone';
+  static const kWidgetOpacity = 'settings_widget_opacity';
 
   static const _channel = MethodChannel('napominator/app');
 
@@ -47,6 +53,14 @@ class AppSettings extends ChangeNotifier {
   CarryMode defaultCarry = CarryMode.shift;
   bool lockScreen = true;
 
+  /// Свой акцентный цвет (ARGB) вместо одного из 10.
+  int? accentCustom;
+
+  bool widgetCustom = false;
+  double widgetHue = 250;
+  double widgetTone = 0.15;
+  double widgetOpacity = 1.0;
+
   Future<void> load() async {
     final p = await SharedPreferences.getInstance();
     themeMode = ThemeMode.values.asNameMap()[p.getString(_kTheme)] ?? ThemeMode.system;
@@ -55,6 +69,31 @@ class AppSettings extends ChangeNotifier {
     timeStyle = TimePickerStyle.values.asNameMap()[p.getString(_kTime)] ?? TimePickerStyle.wheel;
     defaultCarry = CarryMode.values.asNameMap()[p.getString(_kCarry)] ?? CarryMode.shift;
     lockScreen = p.getBool(kLockScreen) ?? true;
+    accentCustom = p.getInt(_kAccentCustom);
+    widgetCustom = p.getBool(kWidgetCustom) ?? false;
+    widgetHue = p.getDouble(kWidgetHue) ?? 250;
+    widgetTone = p.getDouble(kWidgetTone) ?? 0.15;
+    widgetOpacity = p.getDouble(kWidgetOpacity) ?? 1.0;
+  }
+
+  Future<void> setAccentCustom(int argb) async {
+    accentCustom = argb;
+    notifyListeners();
+    await (await _prefs).setInt(_kAccentCustom, argb);
+  }
+
+  /// Оформление виджета (сохраняется, когда пользователь отпускает ползунок).
+  Future<void> setWidgetStyle({bool? custom, double? hue, double? tone, double? opacity}) async {
+    if (custom != null) widgetCustom = custom;
+    if (hue != null) widgetHue = hue;
+    if (tone != null) widgetTone = tone;
+    if (opacity != null) widgetOpacity = opacity;
+    notifyListeners();
+    final p = await _prefs;
+    await p.setBool(kWidgetCustom, widgetCustom);
+    await p.setDouble(kWidgetHue, widgetHue);
+    await p.setDouble(kWidgetTone, widgetTone);
+    await p.setDouble(kWidgetOpacity, widgetOpacity);
   }
 
   Future<SharedPreferences> get _prefs => SharedPreferences.getInstance();
@@ -67,8 +106,11 @@ class AppSettings extends ChangeNotifier {
 
   Future<void> setAccent(int v) async {
     accent = v;
+    accentCustom = null;
     notifyListeners();
-    await (await _prefs).setInt(_kAccent, v);
+    final p = await _prefs;
+    await p.setInt(_kAccent, v);
+    await p.remove(_kAccentCustom);
   }
 
   Future<void> setTimeStyle(TimePickerStyle v) async {

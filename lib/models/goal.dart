@@ -36,6 +36,7 @@ class Goal {
     this.cycleOff = 2,
     this.carry = CarryMode.shift,
     this.endShift = 0,
+    this.customColor,
     List<DateTime>? missedLog,
   })  : completions = completions ?? <DateTime>[],
         missedLog = missedLog ?? <DateTime>[];
@@ -97,6 +98,9 @@ class Goal {
   /// Поведение при пропуске дня.
   CarryMode carry;
 
+  /// Свой цвет (ARGB), если выбран не из палитры.
+  int? customColor;
+
   /// На сколько дней продлена дата окончания (только в режиме [CarryMode.shift]).
   int endShift;
 
@@ -124,6 +128,7 @@ class Goal {
         'cycleOff': cycleOff,
         'carry': carry.name,
         'endShift': endShift,
+        'customColor': customColor,
         'missedLog': missedLog.map(dayKey).toList(),
       };
 
@@ -155,6 +160,7 @@ class Goal {
         cycleOn: (j['cycleOn'] as num?)?.toInt() ?? 2,
         cycleOff: (j['cycleOff'] as num?)?.toInt() ?? 2,
         carry: CarryMode.values.asNameMap()[j['carry']] ?? CarryMode.shift,
+        customColor: (j['customColor'] as num?)?.toInt(),
         // Старые цели всегда сдвигали график — продление срока равно числу переносов.
         endShift: (j['endShift'] as num?)?.toInt() ??
             (j['missedDays'] as num?)?.toInt() ??

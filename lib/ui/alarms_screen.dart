@@ -42,8 +42,9 @@ String untilText(DateTime at, DateTime now) {
   return 'через ${m < 1 ? 1 : m} мин';
 }
 
-GoalPalette alarmPalette(AlarmItem a) =>
-    goalPalettes[a.colorIndex.abs() % goalPalettes.length];
+GoalPalette alarmPalette(AlarmItem a) => a.customColor != null
+    ? paletteFromColor(Color(a.customColor!))
+    : goalPalettes[a.colorIndex.abs() % goalPalettes.length];
 
 class AlarmsScreen extends StatefulWidget {
   const AlarmsScreen({super.key, required this.store});

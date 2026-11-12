@@ -31,58 +31,178 @@ const goalPalettes = <GoalPalette>[
   GoalPalette('Графит', Color(0xFF64748B), Color(0xFF334155)),
 ];
 
-GoalPalette paletteOf(Goal g) =>
-    goalPalettes[g.colorIndex.abs() % goalPalettes.length];
+GoalPalette paletteOf(Goal g) => g.customColor != null
+    ? paletteFromColor(Color(g.customColor!))
+    : goalPalettes[g.colorIndex.abs() % goalPalettes.length];
 
-/// Набор иконок для целей.
+/// Градиент из произвольного цвета: второй цвет — сдвиг оттенка и чуть светлее.
+GoalPalette paletteFromColor(Color c) {
+  final h = HSLColor.fromColor(c);
+  final b = h
+      .withHue((h.hue + 28) % 360)
+      .withLightness((h.lightness + 0.06).clamp(0.0, 1.0))
+      .toColor();
+  return GoalPalette('Свой', c, b);
+}
+
+/// Цвет по оттенку (0–360) и тону: 0 — пастельный, 0.5 — сочный, 1 — тёмный.
+Color toneColor(double hue, double tone) {
+  double lerp(double a, double b, double t) => a + (b - a) * t;
+  final t = tone.clamp(0.0, 1.0);
+  final double s, l;
+  if (t <= 0.5) {
+    s = lerp(0.62, 0.80, t / 0.5);
+    l = lerp(0.82, 0.56, t / 0.5);
+  } else {
+    s = lerp(0.80, 0.55, (t - 0.5) / 0.5);
+    l = lerp(0.56, 0.22, (t - 0.5) / 0.5);
+  }
+  return HSLColor.fromAHSL(1, hue % 360, s, l).toColor();
+}
+
+/// Обратное к [toneColor]: примерный тон по светлоте цвета.
+double toneOf(Color c) {
+  final l = HSLColor.fromColor(c).lightness;
+  if (l >= 0.56) return ((0.82 - l) / 0.26 * 0.5).clamp(0.0, 0.5);
+  return (0.5 + (0.56 - l) / 0.34 * 0.5).clamp(0.5, 1.0);
+}
+
+/// Иконки для целей по категориям (Material Rounded — в стиле остального интерфейса).
+const goalIconGroups = <(String, List<String>)>[
+  ('Главное', ['target', 'star', 'bolt', 'flag', 'trophy', 'fire', 'sparkle', 'rocket']),
+  ('Спорт', ['fitness', 'run', 'walk', 'bike', 'pool', 'yoga', 'hiking', 'ski', 'soccer', 'basketball', 'tennis', 'volleyball', 'martial', 'gym', 'rowing']),
+  ('Здоровье', ['health', 'water', 'sleep', 'meds', 'heart', 'pulse', 'mind', 'spa', 'healing', 'hands', 'sanitizer']),
+  ('Еда', ['food', 'eco', 'breakfast', 'lunch', 'ramen', 'fish', 'egg', 'bakery', 'coffee', 'tea', 'drink', 'icecream', 'kitchen', 'nofood']),
+  ('Учёба и работа', ['book', 'stories', 'school', 'language', 'science', 'calc', 'idea', 'history', 'quiz', 'code', 'laptop', 'work', 'write', 'mail', 'task', 'growth']),
+  ('Дом', ['home', 'clean', 'laundry', 'bed', 'cart', 'recycle', 'tools', 'plant', 'yard']),
+  ('Животные', ['pets', 'rabbit', 'bee']),
+  ('Хобби', ['music', 'piano', 'headphones', 'mic', 'art', 'brush', 'draw', 'camera', 'movie', 'theater', 'games', 'park', 'travel', 'flight']),
+  ('Деньги', ['money', 'payments', 'wallet', 'card', 'ruble']),
+  ('Люди', ['call', 'chat', 'people', 'family', 'child', 'care', 'cake']),
+  ('Привычки', ['sun', 'night', 'alarm', 'timer', 'nophone', 'nosmoke', 'nodrinks']),
+];
+
 const goalIcons = <String, IconData>{
   'target': Icons.track_changes_rounded,
-  'bolt': Icons.bolt_rounded,
   'star': Icons.star_rounded,
+  'bolt': Icons.bolt_rounded,
+  'flag': Icons.flag_rounded,
+  'trophy': Icons.emoji_events_rounded,
+  'fire': Icons.local_fire_department_rounded,
+  'sparkle': Icons.auto_awesome_rounded,
+  'rocket': Icons.rocket_launch_rounded,
   'fitness': Icons.fitness_center_rounded,
   'run': Icons.directions_run_rounded,
   'walk': Icons.directions_walk_rounded,
   'bike': Icons.directions_bike_rounded,
   'pool': Icons.pool_rounded,
   'yoga': Icons.self_improvement_rounded,
-  'book': Icons.menu_book_rounded,
-  'school': Icons.school_rounded,
-  'language': Icons.translate_rounded,
-  'code': Icons.code_rounded,
-  'work': Icons.work_outline_rounded,
-  'write': Icons.edit_note_rounded,
-  'music': Icons.music_note_rounded,
-  'art': Icons.palette_rounded,
-  'camera': Icons.photo_camera_rounded,
+  'hiking': Icons.hiking_rounded,
+  'ski': Icons.downhill_skiing_rounded,
+  'soccer': Icons.sports_soccer_rounded,
+  'basketball': Icons.sports_basketball_rounded,
+  'tennis': Icons.sports_tennis_rounded,
+  'volleyball': Icons.sports_volleyball_rounded,
+  'martial': Icons.sports_martial_arts_rounded,
+  'gym': Icons.sports_gymnastics_rounded,
+  'rowing': Icons.rowing_rounded,
+  'health': Icons.health_and_safety_rounded,
   'water': Icons.water_drop_rounded,
-  'food': Icons.restaurant_rounded,
-  'eco': Icons.eco_rounded,
   'sleep': Icons.bedtime_rounded,
-  'sun': Icons.wb_sunny_rounded,
   'meds': Icons.medication_rounded,
   'heart': Icons.favorite_rounded,
+  'pulse': Icons.monitor_heart_rounded,
   'mind': Icons.psychology_rounded,
-  'money': Icons.savings_rounded,
+  'spa': Icons.spa_rounded,
+  'healing': Icons.healing_rounded,
+  'hands': Icons.clean_hands_rounded,
+  'sanitizer': Icons.sanitizer_rounded,
+  'food': Icons.restaurant_rounded,
+  'eco': Icons.eco_rounded,
+  'breakfast': Icons.breakfast_dining_rounded,
+  'lunch': Icons.lunch_dining_rounded,
+  'ramen': Icons.ramen_dining_rounded,
+  'fish': Icons.set_meal_rounded,
+  'egg': Icons.egg_rounded,
+  'bakery': Icons.bakery_dining_rounded,
+  'coffee': Icons.local_cafe_rounded,
+  'tea': Icons.emoji_food_beverage_rounded,
+  'drink': Icons.local_drink_rounded,
+  'icecream': Icons.icecream_rounded,
+  'kitchen': Icons.kitchen_rounded,
+  'nofood': Icons.no_food_rounded,
+  'book': Icons.menu_book_rounded,
+  'stories': Icons.auto_stories_rounded,
+  'school': Icons.school_rounded,
+  'language': Icons.translate_rounded,
+  'science': Icons.science_rounded,
+  'calc': Icons.calculate_rounded,
+  'idea': Icons.lightbulb_rounded,
+  'history': Icons.history_edu_rounded,
+  'quiz': Icons.quiz_rounded,
+  'code': Icons.code_rounded,
+  'laptop': Icons.laptop_mac_rounded,
+  'work': Icons.work_outline_rounded,
+  'write': Icons.edit_note_rounded,
+  'mail': Icons.email_rounded,
+  'task': Icons.task_alt_rounded,
+  'growth': Icons.trending_up_rounded,
   'home': Icons.home_rounded,
   'clean': Icons.cleaning_services_rounded,
+  'laundry': Icons.local_laundry_service_rounded,
+  'bed': Icons.bed_rounded,
+  'cart': Icons.shopping_cart_rounded,
+  'recycle': Icons.recycling_rounded,
+  'tools': Icons.build_rounded,
   'plant': Icons.local_florist_rounded,
+  'yard': Icons.yard_rounded,
   'pets': Icons.pets_rounded,
+  'rabbit': Icons.cruelty_free_rounded,
+  'bee': Icons.emoji_nature_rounded,
+  'music': Icons.music_note_rounded,
+  'piano': Icons.piano_rounded,
+  'headphones': Icons.headphones_rounded,
+  'mic': Icons.mic_rounded,
+  'art': Icons.palette_rounded,
+  'brush': Icons.brush_rounded,
+  'draw': Icons.draw_rounded,
+  'camera': Icons.photo_camera_rounded,
+  'movie': Icons.movie_rounded,
+  'theater': Icons.theater_comedy_rounded,
+  'games': Icons.sports_esports_rounded,
+  'park': Icons.park_rounded,
+  'travel': Icons.travel_explore_rounded,
+  'flight': Icons.flight_rounded,
+  'money': Icons.savings_rounded,
+  'payments': Icons.payments_rounded,
+  'wallet': Icons.account_balance_wallet_rounded,
+  'card': Icons.credit_card_rounded,
+  'ruble': Icons.currency_ruble_rounded,
   'call': Icons.call_rounded,
+  'chat': Icons.chat_rounded,
+  'people': Icons.people_rounded,
+  'family': Icons.family_restroom_rounded,
+  'child': Icons.child_care_rounded,
+  'care': Icons.volunteer_activism_rounded,
+  'cake': Icons.cake_rounded,
+  'sun': Icons.wb_sunny_rounded,
+  'night': Icons.nightlight_rounded,
+  'alarm': Icons.alarm_rounded,
+  'timer': Icons.timer_rounded,
   'nophone': Icons.phonelink_erase_rounded,
   'nosmoke': Icons.smoke_free_rounded,
-  'fish': Icons.set_meal_rounded,
-  'health': Icons.health_and_safety_rounded,
-  'soccer': Icons.sports_soccer_rounded,
-  'movie': Icons.movie_rounded,
-  'games': Icons.sports_esports_rounded,
-  'payments': Icons.payments_rounded,
+  'nodrinks': Icons.no_drinks_rounded,
 };
 
 IconData iconOf(Goal g) => goalIcons[g.icon] ?? Icons.track_changes_rounded;
 
 /// Акцентный цвет приложения (выбирается в настройках).
-GoalPalette brandPalette() =>
-    goalPalettes[AppSettings.instance.accent.abs() % goalPalettes.length];
+GoalPalette brandPalette() {
+  final s = AppSettings.instance;
+  return s.accentCustom != null
+      ? paletteFromColor(Color(s.accentCustom!))
+      : goalPalettes[s.accent.abs() % goalPalettes.length];
+}
 
 /// Цвета поверхностей, которых нет в стандартной схеме.
 class AppColors {
@@ -111,9 +231,11 @@ class AppColors {
         ];
 }
 
-ThemeData buildTheme(Brightness brightness, {int accent = 0}) {
+ThemeData buildTheme(Brightness brightness, {int accent = 0, int? accentCustom}) {
   final dark = brightness == Brightness.dark;
-  final seed = goalPalettes[accent.abs() % goalPalettes.length].a;
+  final seed = accentCustom != null
+      ? Color(accentCustom)
+      : goalPalettes[accent.abs() % goalPalettes.length].a;
   final scheme = ColorScheme.fromSeed(
     seedColor: seed,
     brightness: brightness,

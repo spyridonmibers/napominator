@@ -1,9 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/w_root"
     android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <!-- Фон: белая скруглённая форма, цвет и прозрачность задаются из кода -->
+    <ImageView
+        android:id="@+id/w_bg"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="fitXY"
+        android:src="@drawable/widget_bg_shape" />
+
+<LinearLayout
+    android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/widget_bg"
     android:orientation="vertical"
     android:paddingStart="16dp"
     android:paddingTop="14dp"
@@ -254,3 +265,4 @@
         android:textSize="14sp"
         android:visibility="gone" />
 </LinearLayout>
+</FrameLayout>

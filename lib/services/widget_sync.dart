@@ -3,6 +3,7 @@ import 'dart:io' show Platform;
 import 'dart:ui' show DartPluginRegistrant;
 
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart' show Color;
 import 'package:home_widget/home_widget.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -80,6 +81,21 @@ class WidgetSync {
         'color': '#${paletteOf(g).main.toARGB32().toRadixString(16).padLeft(8, '0')}',
       };
 
+  static String _hex(Color c) =>
+      '#${c.toARGB32().toRadixString(16).padLeft(8, '0')}';
+
+  /// Цвета виджета из настроек: фон (с прозрачностью), текст и приглушённый текст.
+  static Map<String, String> _style(double hue, double tone, double opacity) {
+    final base = toneColor(hue, tone);
+    final dark = base.computeLuminance() < 0.45;
+    final text = dark ? const Color(0xFFFFFFFF) : const Color(0xFF16161D);
+    return {
+      'bg': _hex(base.withValues(alpha: opacity.clamp(0.0, 1.0))),
+      'text': _hex(text),
+      'muted': _hex(text.withValues(alpha: 0.6)),
+    };
+  }
+
   /// Обновить виджет и панель на экране блокировки (Android) или Live Activity (iPhone).
   static Future<void> update(List<Goal> goals) async {
     if (!Platform.isAndroid && !Platform.isIOS) return;
@@ -126,6 +142,12 @@ class WidgetSync {
       final data = {
         'date': dayKey(t),
         'panel': lockScreen,
+        if (prefs.getBool(AppSettings.kWidgetCustom) ?? false)
+          'style': _style(
+            prefs.getDouble(AppSettings.kWidgetHue) ?? 250,
+            prefs.getDouble(AppSettings.kWidgetTone) ?? 0.15,
+            prefs.getDouble(AppSettings.kWidgetOpacity) ?? 1.0,
+          ),
         'today': [for (final g in today) _item(g, doneOn(g, t))],
         'next': [for (final g in next) _item(g, false)],
       };
