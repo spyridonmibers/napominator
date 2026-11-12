@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 
 import '../models/goal.dart';
 import '../services/notifications.dart';
+import '../state/alarm_store.dart';
 import '../state/goal_store.dart';
+import 'alarms_screen.dart';
 import 'calendar_screen.dart';
 import 'edit_goal_screen.dart';
 import 'goal_detail_screen.dart';
@@ -14,8 +16,9 @@ import 'today_screen.dart';
 
 /// Главный экран с нижним меню: Сегодня / Календарь / Все цели.
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key, required this.store});
+  const HomeScreen({super.key, required this.store, required this.alarms});
   final GoalStore store;
+  final AlarmStore alarms;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -46,7 +49,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) store.refresh();
+    if (state == AppLifecycleState.resumed) {
+      store.refresh();
+      widget.alarms.load(); // заодно перепланирует будильники (нужно для iPhone)
+    }
   }
 
   void _scheduleMidnight() {
@@ -87,6 +93,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           TodayScreen(store: store, onAdd: _add, onOpen: _open),
           CalendarScreen(store: store, onOpen: _open),
           GoalsScreen(store: store, onAdd: _add, onOpen: _open),
+          AlarmsScreen(store: widget.alarms),
           SettingsScreen(store: store),
         ],
       ),
@@ -107,7 +114,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           NavigationDestination(
             icon: Icon(Icons.grid_view_outlined),
             selectedIcon: Icon(Icons.grid_view_rounded),
-            label: 'Все цели',
+            label: 'Цели',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.alarm_outlined),
+            selectedIcon: Icon(Icons.alarm_rounded),
+            label: 'Будильник',
           ),
           NavigationDestination(
             icon: Icon(Icons.settings_outlined),

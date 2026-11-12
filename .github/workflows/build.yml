@@ -45,7 +45,7 @@ jobs:
           fi
 
       - name: Сборка APK
-        run: flutter build apk --release
+        run: flutter build apk --release --build-number=${{ github.run_number }}
 
       - run: cp build/app/outputs/flutter-apk/app-release.apk napominator.apk
 
@@ -68,7 +68,7 @@ jobs:
         run: bash tool/setup_platforms.sh
 
       - name: Сборка iOS без подписи
-        run: flutter build ios --release --no-codesign
+        run: flutter build ios --release --no-codesign --build-number=${{ github.run_number }}
 
       - name: Упаковка IPA
         run: |

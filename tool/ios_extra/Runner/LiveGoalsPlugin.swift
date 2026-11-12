@@ -12,6 +12,7 @@ class LiveGoalsPlugin: NSObject, FlutterPlugin {
         registrar.addMethodCallDelegate(instance, channel: channel)
         let appChannel = FlutterMethodChannel(name: "napominator/app", binaryMessenger: registrar.messenger())
         registrar.addMethodCallDelegate(instance, channel: appChannel)
+        AlarmBridge.shared.register(with: registrar)
         if let old = observer {
             NotificationCenter.default.removeObserver(old)
         }

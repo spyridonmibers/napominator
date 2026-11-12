@@ -6,6 +6,7 @@ import 'package:home_widget/home_widget.dart';
 
 import 'services/notifications.dart';
 import 'services/widget_sync.dart';
+import 'state/alarm_store.dart';
 import 'state/app_settings.dart';
 import 'state/goal_store.dart';
 import 'ui/home_screen.dart';
@@ -28,13 +29,16 @@ Future<void> main() async {
     } catch (_) {}
   }
   LiveSync.init(store.refresh);
-  runApp(NapominatorApp(store: store));
+  final alarms = AlarmStore();
+  runApp(NapominatorApp(store: store, alarms: alarms));
   store.refresh();
+  alarms.load();
 }
 
 class NapominatorApp extends StatelessWidget {
-  const NapominatorApp({super.key, required this.store});
+  const NapominatorApp({super.key, required this.store, required this.alarms});
   final GoalStore store;
+  final AlarmStore alarms;
 
   @override
   Widget build(BuildContext context) {
@@ -54,7 +58,7 @@ class NapominatorApp extends StatelessWidget {
       themeMode: settings.themeMode,
       theme: buildTheme(Brightness.light, accent: settings.accent),
       darkTheme: buildTheme(Brightness.dark, accent: settings.accent),
-      home: HomeScreen(store: store),
+      home: HomeScreen(store: store, alarms: alarms),
       ),
     );
   }

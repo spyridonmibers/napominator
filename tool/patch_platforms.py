@@ -31,6 +31,11 @@ PERMS = """
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <uses-permission android:name="android.permission.VIBRATE"/>
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM"/>
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
 """
 RECEIVERS = """
         <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ActionBroadcastReceiver" />
@@ -70,6 +75,25 @@ WIDGET = """
             android:permission="android.permission.BIND_JOB_SERVICE"
             android:exported="true" />
 """
+ALARM = """
+        <receiver android:name=".AlarmReceiver" android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+            </intent-filter>
+        </receiver>
+        <service android:name=".AlarmService" android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
+        <activity android:name=".AlarmActivity" android:exported="false"
+            android:showWhenLocked="true" android:turnScreenOn="true"
+            android:excludeFromRecents="true" android:launchMode="singleInstance"
+            android:taskAffinity="" android:screenOrientation="portrait"
+            android:theme="@android:style/Theme.Material.NoActionBar.Fullscreen" />
+"""
+if "AlarmReceiver" not in m:
+    m = m.replace("</application>", ALARM + "    </application>", 1)
 if "TodayWidgetProvider" not in m:
     m = m.replace("</application>", WIDGET + "    </application>", 1)
 m = re.sub(r'android:label="[^"]*"', f'android:label="{APP_NAME}"', m, count=1)
@@ -107,11 +131,16 @@ extra = ROOT / "tool/android_extra"
 shutil.copytree(extra / "res", main_dir / "res", dirs_exist_ok=True)
 activity = list((main_dir / "kotlin").rglob("MainActivity.kt"))
 if activity:
-    shutil.copy(extra / "kotlin/TodayWidgetProvider.kt", activity[0].parent / "TodayWidgetProvider.kt")
-    shutil.copy(extra / "kotlin/MainActivity.kt", activity[0])
+    # MainActivity заменяем своей, остальные классы (виджет, будильник) кладём рядом
+    for kt in (extra / "kotlin").glob("*.kt"):
+        shutil.copy(kt, activity[0].parent / kt.name)
 else:
     errors.append("не найден MainActivity.kt — некуда положить виджет")
 shutil.copytree(ROOT / "tool/icons/android", main_dir / "res", dirs_exist_ok=True)
+# Мелодии будильника
+(main_dir / "res/raw").mkdir(parents=True, exist_ok=True)
+for snd in (ROOT / "tool/sounds/android").glob("*.ogg"):
+    shutil.copy(snd, main_dir / "res/raw" / snd.name)
 
 # ---------------- Android: desugaring ----------------
 kts = ROOT / "android/app/build.gradle.kts"
@@ -179,6 +208,10 @@ p = re.sub(r"(<key>CFBundleDisplayName</key>\s*<string>)[^<]*(</string>)",
 if "NSSupportsLiveActivities" not in p:
     idx = p.rfind("</dict>")
     p = p[:idx] + "\t<key>NSSupportsLiveActivities</key>\n\t<true/>\n" + p[idx:]
+if "NSAlarmKitUsageDescription" not in p:
+    idx = p.rfind("</dict>")
+    p = (p[:idx] + "\t<key>NSAlarmKitUsageDescription</key>\n"
+         "\t<string>Чтобы будильники звонили по вашему графику, даже в беззвучном режиме.</string>\n" + p[idx:])
 write(plist, p)
 
 # ---------------- iOS: иконка ----------------

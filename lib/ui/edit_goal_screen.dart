@@ -1,4 +1,3 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import '../models/day.dart';
@@ -6,6 +5,7 @@ import '../models/goal.dart';
 import '../state/app_settings.dart';
 import '../state/goal_store.dart';
 import 'format.dart';
+import 'schedule_picker.dart';
 import 'settings_screen.dart' show CarryPicker;
 import 'theme.dart';
 import 'widgets.dart';
@@ -104,76 +104,8 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
     if (picked != null) setState(() => _end = dayOf(picked));
   }
 
-  /// Выбор времени: колесо или циферблат — как выбрано в настройках.
   Future<void> _pickTime() async {
-    if (AppSettings.instance.timeStyle == TimePickerStyle.dial) {
-      final cur = _reminder ?? 9 * 60;
-      final picked = await showTimePicker(
-        context: context,
-        initialTime: TimeOfDay(hour: cur ~/ 60, minute: cur % 60),
-        helpText: 'Время напоминания',
-        builder: (c, child) => MediaQuery(
-          data: MediaQuery.of(c).copyWith(alwaysUse24HourFormat: true),
-          child: child!,
-        ),
-      );
-      if (picked != null) {
-        setState(() => _reminder = picked.hour * 60 + picked.minute);
-      }
-      return;
-    }
-    final m = ((_reminder ?? 9 * 60) ~/ 5) * 5;
-    var selected = m;
-    final result = await showModalBottomSheet<int>(
-      context: context,
-      showDragHandle: true,
-      backgroundColor: AppColors.card(context),
-      builder: (c) {
-        final th = Theme.of(c);
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text('Время напоминания', style: th.textTheme.titleLarge),
-                const SizedBox(height: 8),
-                SizedBox(
-                  height: 216,
-                  child: CupertinoTheme(
-                    data: CupertinoThemeData(
-                      brightness: th.brightness,
-                      textTheme: CupertinoTextThemeData(
-                        dateTimePickerTextStyle: TextStyle(
-                          fontSize: 26,
-                          fontWeight: FontWeight.w600,
-                          color: th.colorScheme.onSurface,
-                        ),
-                      ),
-                    ),
-                    child: CupertinoDatePicker(
-                      mode: CupertinoDatePickerMode.time,
-                      use24hFormat: true,
-                      minuteInterval: 5,
-                      initialDateTime: DateTime(2000, 1, 1, m ~/ 60, m % 60),
-                      onDateTimeChanged: (d) => selected = d.hour * 60 + d.minute,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton(
-                    onPressed: () => Navigator.pop(c, selected),
-                    child: const Text('Готово'),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
+    final result = await pickTimeMinutes(context, current: _reminder ?? 9 * 60);
     if (result != null) setState(() => _reminder = result);
   }
 
@@ -399,7 +331,7 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _ChoiceRow<RepeatType>(
+                ChoiceRow<RepeatType>(
                   value: _repeat,
                   palette: pal,
                   options: const {
@@ -409,7 +341,7 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
                   onChanged: (v) => setState(() => _repeat = v),
                 ),
                 const SizedBox(height: 8),
-                _ChoiceRow<RepeatType>(
+                ChoiceRow<RepeatType>(
                   value: _repeat,
                   palette: pal,
                   options: const {
@@ -429,7 +361,7 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             for (var w = 1; w <= 7; w++)
-                              _DayToggle(
+                              DayToggle(
                                 label: weekdayShort[w - 1],
                                 selected: _weekdays.contains(w),
                                 palette: pal,
@@ -442,7 +374,7 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
                       ),
                     RepeatType.cycle => Padding(
                         padding: const EdgeInsets.only(top: 16),
-                        child: _CycleEditor(
+                        child: CycleEditor(
                           on: _cycleOn,
                           off: _cycleOff,
                           start: _start,
@@ -470,7 +402,7 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
                   ),
                 const SizedBox(height: 8),
                 const Divider(),
-                _SettingTile(
+                SettingTile(
                   icon: Icons.event_rounded,
                   title: 'Начало',
                   value: formatRelative(_start),
@@ -486,7 +418,7 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _ChoiceRow<DeadlineType>(
+                ChoiceRow<DeadlineType>(
                   value: _deadline,
                   palette: pal,
                   options: const {
@@ -498,7 +430,7 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
                 ),
                 if (_deadline == DeadlineType.date) ...[
                   const SizedBox(height: 8),
-                  _SettingTile(
+                  SettingTile(
                     icon: Icons.flag_rounded,
                     title: 'Дата окончания',
                     value: formatDate(_end),
@@ -598,7 +530,7 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
                         for (final p in _timePresets) ...[
                           if (p != _timePresets.first) const SizedBox(width: 8),
                           Expanded(
-                            child: _TimePreset(
+                            child: TimePreset(
                               label: p.$1,
                               time: formatTime(p.$2),
                               selected: _reminder == p.$2,
@@ -633,351 +565,3 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
   }
 }
 
-/// Выбор одного варианта из нескольких — «таблетки» в цвете цели.
-class _ChoiceRow<T> extends StatelessWidget {
-  const _ChoiceRow({
-    required this.value,
-    required this.options,
-    required this.onChanged,
-    required this.palette,
-  });
-
-  final T value;
-  final Map<T, String> options;
-  final ValueChanged<T> onChanged;
-  final GoalPalette palette;
-
-  @override
-  Widget build(BuildContext context) {
-    final th = Theme.of(context);
-    return Row(
-      children: [
-        for (final e in options.entries) ...[
-          if (e.key != options.keys.first) const SizedBox(width: 8),
-          Expanded(
-            child: GestureDetector(
-              onTap: () => onChanged(e.key),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                height: 44,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  gradient: e.key == value ? palette.gradient : null,
-                  color: e.key == value ? null : AppColors.muted(context),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text(
-                      e.value,
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 14,
-                        color: e.key == value ? Colors.white : th.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-}
-
-class _DayToggle extends StatelessWidget {
-  const _DayToggle({
-    required this.label,
-    required this.selected,
-    required this.palette,
-    required this.onTap,
-  });
-  final String label;
-  final bool selected;
-  final GoalPalette palette;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        width: 40,
-        height: 40,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          gradient: selected ? palette.gradient : null,
-          color: selected ? null : AppColors.muted(context),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontWeight: FontWeight.w700,
-            fontSize: 13,
-            color: selected ? Colors.white : Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _SettingTile extends StatelessWidget {
-  const _SettingTile({
-    required this.icon,
-    required this.title,
-    required this.value,
-    required this.onTap,
-  });
-  final IconData icon;
-  final String title;
-  final String value;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final th = Theme.of(context);
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        child: Row(
-          children: [
-            Icon(icon, color: th.colorScheme.onSurfaceVariant),
-            const SizedBox(width: 14),
-            Expanded(child: Text(title, style: th.textTheme.bodyLarge)),
-            Text(value,
-                style: th.textTheme.bodyLarge?.copyWith(
-                    color: th.colorScheme.primary, fontWeight: FontWeight.w600)),
-            const SizedBox(width: 4),
-            Icon(Icons.chevron_right_rounded, color: th.colorScheme.onSurfaceVariant),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _TimePreset extends StatelessWidget {
-  const _TimePreset({
-    required this.label,
-    required this.time,
-    required this.selected,
-    required this.palette,
-    required this.onTap,
-  });
-  final String label;
-  final String time;
-  final bool selected;
-  final GoalPalette palette;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final th = Theme.of(context);
-    final fg = selected ? Colors.white : th.colorScheme.onSurface;
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-        decoration: BoxDecoration(
-          gradient: selected ? palette.gradient : null,
-          color: selected ? null : AppColors.muted(context),
-          borderRadius: BorderRadius.circular(14),
-        ),
-        child: Column(
-          children: [
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Text(label,
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: fg)),
-            ),
-            const SizedBox(height: 2),
-            Text(time,
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: fg)),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Редактор своего графика «N через M»: пресеты, счётчики и превью на 14 дней.
-class _CycleEditor extends StatelessWidget {
-  const _CycleEditor({
-    required this.on,
-    required this.off,
-    required this.start,
-    required this.palette,
-    required this.onChanged,
-  });
-
-  final int on;
-  final int off;
-  final DateTime start;
-  final GoalPalette palette;
-  final void Function(int on, int off) onChanged;
-
-  static const _presets = <(int, int)>[(2, 2), (3, 1), (1, 2), (5, 2), (3, 3), (1, 3)];
-  static const _max = 30;
-
-  @override
-  Widget build(BuildContext context) {
-    final th = Theme.of(context);
-    final t = todayDay();
-    final from = start.isAfter(t) ? start : t;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            for (final p in _presets)
-              GestureDetector(
-                onTap: () => onChanged(p.$1, p.$2),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                  decoration: BoxDecoration(
-                    gradient: p.$1 == on && p.$2 == off ? palette.gradient : null,
-                    color: p.$1 == on && p.$2 == off ? null : AppColors.muted(context),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    '${p.$1}/${p.$2}',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w800,
-                      fontSize: 15,
-                      color: p.$1 == on && p.$2 == off
-                          ? Colors.white
-                          : th.colorScheme.onSurface,
-                    ),
-                  ),
-                ),
-              ),
-          ],
-        ),
-        const SizedBox(height: 14),
-        _Stepper(
-          label: 'Выполнять',
-          value: on,
-          palette: palette,
-          onMinus: on > 1 ? () => onChanged(on - 1, off) : null,
-          onPlus: on < _max ? () => onChanged(on + 1, off) : null,
-        ),
-        const SizedBox(height: 8),
-        _Stepper(
-          label: 'Отдыхать',
-          value: off,
-          palette: palette,
-          onMinus: off > 1 ? () => onChanged(on, off - 1) : null,
-          onPlus: off < _max ? () => onChanged(on, off + 1) : null,
-        ),
-        const SizedBox(height: 14),
-        Text(
-          'Ближайшие 14 дней',
-          style: th.textTheme.labelMedium?.copyWith(color: th.colorScheme.onSurfaceVariant),
-        ),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            for (var i = 0; i < 14; i++) ...[
-              if (i > 0) const SizedBox(width: 3),
-              Expanded(
-                child: Builder(builder: (_) {
-                  final d = addDays(from, i);
-                  final work = daysBetween(start, d) % (on + off) < on;
-                  return Column(
-                    children: [
-                      AspectRatio(
-                        aspectRatio: 0.7,
-                        child: Container(
-                          decoration: BoxDecoration(
-                            gradient: work ? palette.gradient : null,
-                            color: work ? null : AppColors.muted(context),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        '${d.day}',
-                        style: TextStyle(
-                          fontSize: 9,
-                          fontWeight: d == t ? FontWeight.w800 : FontWeight.w500,
-                          color: d == t ? palette.a : th.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  );
-                }),
-              ),
-            ],
-          ],
-        ),
-      ],
-    );
-  }
-}
-
-class _Stepper extends StatelessWidget {
-  const _Stepper({
-    required this.label,
-    required this.value,
-    required this.palette,
-    required this.onMinus,
-    required this.onPlus,
-  });
-
-  final String label;
-  final int value;
-  final GoalPalette palette;
-  final VoidCallback? onMinus;
-  final VoidCallback? onPlus;
-
-  @override
-  Widget build(BuildContext context) {
-    final th = Theme.of(context);
-    Widget btn(IconData icon, VoidCallback? onTap) => Material(
-          color: AppColors.muted(context),
-          shape: const CircleBorder(),
-          child: InkWell(
-            customBorder: const CircleBorder(),
-            onTap: onTap,
-            child: SizedBox(
-              width: 38,
-              height: 38,
-              child: Icon(icon,
-                  size: 20,
-                  color: onTap == null
-                      ? th.colorScheme.onSurfaceVariant.withValues(alpha: 0.4)
-                      : th.colorScheme.onSurface),
-            ),
-          ),
-        );
-    return Row(
-      children: [
-        Expanded(child: Text(label, style: th.textTheme.bodyLarge)),
-        btn(Icons.remove_rounded, onMinus),
-        SizedBox(
-          width: 76,
-          child: Text(
-            daysWord(value),
-            textAlign: TextAlign.center,
-            style: th.textTheme.titleMedium?.copyWith(color: palette.a, fontWeight: FontWeight.w800),
-          ),
-        ),
-        btn(Icons.add_rounded, onPlus),
-      ],
-    );
-  }
-}

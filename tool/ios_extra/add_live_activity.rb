@@ -12,7 +12,9 @@ FileUtils.mkdir_p(File.join(ios, 'GoalsLive'))
 FileUtils.mkdir_p(File.join(ios, 'Shared'))
 FileUtils.cp(Dir[File.join(extra, 'GoalsLive/*')], File.join(ios, 'GoalsLive'))
 FileUtils.cp(File.join(extra, 'Shared/GoalsActivity.swift'), File.join(ios, 'Shared'))
-FileUtils.cp(File.join(extra, 'Runner/LiveGoalsPlugin.swift'), File.join(ios, 'Runner'))
+FileUtils.cp(Dir[File.join(extra, 'Runner/*.swift')], File.join(ios, 'Runner'))
+FileUtils.mkdir_p(File.join(ios, 'Runner/Sounds'))
+FileUtils.cp(Dir[File.join(root, 'tool/sounds/ios/*.caf')], File.join(ios, 'Runner/Sounds'))
 
 project = Xcodeproj::Project.open(File.join(ios, 'Runner.xcodeproj'))
 
@@ -23,6 +25,24 @@ if runner_target && !alt_icons.empty?
   runner_target.build_configurations.each do |c|
     c.build_settings['ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES'] = alt_icons.join(' ')
     c.build_settings['ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS'] = 'NO'
+  end
+  project.save
+end
+
+# Будильник: мост к AlarmKit и мелодии в бандле приложения
+if runner_target
+  runner_group0 = project.main_group.find_subpath('Runner', false)
+  if runner_group0 && runner_group0.files.none? { |f| f.path == 'AlarmBridge.swift' }
+    ref = runner_group0.new_reference('AlarmBridge.swift')
+    runner_target.add_file_references([ref])
+  end
+  sounds_group = runner_group0.children.find { |g| g.respond_to?(:path) && g.path == 'Sounds' } ||
+                 runner_group0.new_group('Sounds', 'Sounds')
+  Dir[File.join(ios, 'Runner/Sounds/*.caf')].sort.each do |f|
+    name = File.basename(f)
+    next if sounds_group.files.any? { |x| x.path == name }
+    ref = sounds_group.new_reference(name)
+    runner_target.resources_build_phase.add_file_reference(ref, true)
   end
   project.save
 end
