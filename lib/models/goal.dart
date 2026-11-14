@@ -8,8 +8,9 @@ enum DeadlineType { none, date, count }
 /// Что делать, если день пропущен:
 /// shift — перенести цель на завтра и сдвинуть весь график (и срок) на день;
 /// keep  — перенести цель на завтра, но дальше идти по прежнему графику;
-/// skip  — не переносить: пропуск засчитывается, цель ждёт следующего дня по графику.
-enum CarryMode { shift, keep, skip }
+/// skip  — не переносить: пропуск засчитывается, цель ждёт следующего дня по графику;
+/// ask   — спросить: цель ждёт решения пользователя (отменить / перенести / перенести со сдвигом).
+enum CarryMode { shift, keep, skip, ask }
 
 class Goal {
   Goal({
@@ -37,6 +38,11 @@ class Goal {
     this.carry = CarryMode.shift,
     this.endShift = 0,
     this.customColor,
+    this.parentId,
+    this.offsetDays = 0,
+    this.linkDay,
+    this.dueMinutes,
+    this.awaiting = false,
     List<DateTime>? missedLog,
   })  : completions = completions ?? <DateTime>[],
         missedLog = missedLog ?? <DateTime>[];
@@ -101,6 +107,28 @@ class Goal {
   /// Свой цвет (ARGB), если выбран не из палитры.
   int? customColor;
 
+  /// Главная цель, к которой привязана эта (null — самостоятельная цель).
+  /// У привязанной цели нет своего графика: она идёт за каждым днём главной.
+  String? parentId;
+
+  /// Смещение от дня главной цели: −N — за N дней до, 0 — в тот же день, +N — через N дней.
+  int offsetDays;
+
+  /// День главной цели, к которому относится текущее ожидающее выполнение.
+  DateTime? linkDay;
+
+  /// Выполнить до этого времени дня (минуты от полуночи); null — до конца дня.
+  int? dueMinutes;
+
+  /// Срок прошёл, цель ждёт решения пользователя (режим [CarryMode.ask]).
+  bool awaiting;
+
+  /// Главная цель (не сохраняется, проставляется после загрузки — см. linkGoals).
+  Goal? parent;
+
+  /// Служебное: на сколько дней привязанная цель просит сдвинуть главную.
+  int pendingParentShift = 0;
+
   /// На сколько дней продлена дата окончания (только в режиме [CarryMode.shift]).
   int endShift;
 
@@ -129,6 +157,11 @@ class Goal {
         'carry': carry.name,
         'endShift': endShift,
         'customColor': customColor,
+        'parentId': parentId,
+        'offsetDays': offsetDays,
+        'linkDay': linkDay == null ? null : dayKey(linkDay!),
+        'dueMinutes': dueMinutes,
+        'awaiting': awaiting,
         'missedLog': missedLog.map(dayKey).toList(),
       };
 
@@ -161,6 +194,11 @@ class Goal {
         cycleOff: (j['cycleOff'] as num?)?.toInt() ?? 2,
         carry: CarryMode.values.asNameMap()[j['carry']] ?? CarryMode.shift,
         customColor: (j['customColor'] as num?)?.toInt(),
+        parentId: j['parentId'] as String?,
+        offsetDays: (j['offsetDays'] as num?)?.toInt() ?? 0,
+        linkDay: j['linkDay'] == null ? null : parseDay(j['linkDay'] as String),
+        dueMinutes: (j['dueMinutes'] as num?)?.toInt(),
+        awaiting: j['awaiting'] as bool? ?? false,
         // Старые цели всегда сдвигали график — продление срока равно числу переносов.
         endShift: (j['endShift'] as num?)?.toInt() ??
             (j['missedDays'] as num?)?.toInt() ??

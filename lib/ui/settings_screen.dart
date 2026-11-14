@@ -6,7 +6,11 @@ import 'package:flutter/material.dart';
 import '../models/goal.dart';
 import '../state/app_settings.dart';
 import '../state/goal_store.dart';
+import '../services/alarm_bridge.dart';
 import 'color_picker.dart';
+import 'edit_alarm_screen.dart' show SoundSheet;
+import 'format.dart';
+import 'schedule_picker.dart';
 import 'theme.dart';
 import 'widgets.dart';
 
@@ -15,18 +19,21 @@ const carryTitles = {
   CarryMode.shift: 'Переносить и сдвигать график',
   CarryMode.keep: 'Переносить, график не менять',
   CarryMode.skip: 'Не переносить',
+  CarryMode.ask: 'Спрашивать каждый раз',
 };
 
 const carryHints = {
-  CarryMode.shift: 'Цель переедет на завтра, весь график и срок сдвинутся на день',
-  CarryMode.keep: 'Цель переедет на завтра, следующие дни — по прежнему плану',
-  CarryMode.skip: 'Пропуск засчитается, цель ждёт следующего дня по графику',
+  CarryMode.shift: 'Цель переедет на следующий день, весь график и срок сдвинутся',
+  CarryMode.keep: 'Цель переедет на следующий день, дальше — по прежнему плану',
+  CarryMode.skip: 'Выполнение отменяется, цель ждёт следующего дня по графику',
+  CarryMode.ask: 'Придёт уведомление с выбором: перенести, перенести с графиком или отменить',
 };
 
 const carryIcons = {
   CarryMode.shift: Icons.fast_forward_rounded,
   CarryMode.keep: Icons.redo_rounded,
   CarryMode.skip: Icons.block_rounded,
+  CarryMode.ask: Icons.help_outline_rounded,
 };
 
 class SettingsScreen extends StatelessWidget {
@@ -142,13 +149,11 @@ class SettingsScreen extends StatelessWidget {
             ),
 
             // ---- Цели ----
-            const SectionTitle('Цели'),
+            const SectionTitle('Выбор времени'),
             AppCard(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Выбор времени напоминания', style: th.textTheme.titleSmall),
-                  const SizedBox(height: 10),
                   _Pills<TimePickerStyle>(
                     value: s.timeStyle,
                     options: const {
@@ -161,13 +166,134 @@ class SettingsScreen extends StatelessWidget {
                     },
                     onChanged: s.setTimeStyle,
                   ),
-                  const SizedBox(height: 18),
-                  Text('Если пропустить день — для новых целей', style: th.textTheme.titleSmall),
+                ],
+              ),
+            ),
+
+            // ---- По умолчанию: цели ----
+            const SectionTitle('По умолчанию для новых целей'),
+            AppCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Периодичность', style: th.textTheme.titleSmall),
+                  const SizedBox(height: 10),
+                  ChoiceRow<RepeatType>(
+                    value: s.defaultRepeat,
+                    palette: brandPalette(),
+                    options: const {
+                      RepeatType.daily: 'Каждый день',
+                      RepeatType.everyOtherDay: 'Через день',
+                    },
+                    onChanged: (v) => s.setGoalDefaults(repeat: v),
+                  ),
+                  const SizedBox(height: 8),
+                  ChoiceRow<RepeatType>(
+                    value: s.defaultRepeat,
+                    palette: brandPalette(),
+                    options: const {
+                      RepeatType.weekdays: 'Дни недели',
+                      RepeatType.cycle: 'Свой график',
+                    },
+                    onChanged: (v) => s.setGoalDefaults(repeat: v),
+                  ),
+                  const SizedBox(height: 10),
+                  const Divider(),
+                  _SwitchRow(
+                    icon: Icons.notifications_rounded,
+                    title: 'Напоминать',
+                    hint: s.defaultReminderOn
+                        ? 'Новые цели создаются с напоминанием'
+                        : 'Новые цели создаются без напоминания',
+                    value: s.defaultReminderOn,
+                    onChanged: (v) => s.setGoalDefaults(reminderOn: v),
+                  ),
+                  if (s.defaultReminderOn)
+                    SettingTile(
+                      icon: Icons.schedule_rounded,
+                      title: 'Время напоминания',
+                      value: formatTime(s.defaultReminderMinutes),
+                      onTap: () async {
+                        final r = await pickTimeMinutes(context, current: s.defaultReminderMinutes);
+                        if (r != null) s.setGoalDefaults(reminderMinutes: r);
+                      },
+                    ),
+                  const Divider(),
+                  _SwitchRow(
+                    icon: Icons.hourglass_bottom_rounded,
+                    title: 'Выполнить до времени',
+                    hint: s.defaultDueOn ? 'У новых целей есть срок в течение дня' : 'Срок — до конца дня',
+                    value: s.defaultDueOn,
+                    onChanged: (v) => s.setGoalDefaults(dueOn: v),
+                  ),
+                  if (s.defaultDueOn)
+                    SettingTile(
+                      icon: Icons.schedule_rounded,
+                      title: 'Выполнить до',
+                      value: formatTime(s.defaultDueMinutes),
+                      onTap: () async {
+                        final r = await pickTimeMinutes(context,
+                            current: s.defaultDueMinutes, title: 'Выполнить до');
+                        if (r != null) s.setGoalDefaults(dueMinutes: r);
+                      },
+                    ),
+                  const Divider(),
+                  const SizedBox(height: 10),
+                  Text('Если цель не выполнена в срок', style: th.textTheme.titleSmall),
                   const SizedBox(height: 10),
                   CarryPicker(
                     value: s.defaultCarry,
                     palette: brandPalette(),
                     onChanged: s.setDefaultCarry,
+                  ),
+                ],
+              ),
+            ),
+
+            // ---- По умолчанию: будильники ----
+            const SectionTitle('По умолчанию для новых будильников'),
+            AppCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SettingTile(
+                    icon: Icons.music_note_rounded,
+                    title: 'Мелодия',
+                    value: s.alarmSoundTitle,
+                    onTap: () async {
+                      final r = await showModalBottomSheet<(String, String)>(
+                        context: context,
+                        showDragHandle: true,
+                        isScrollControlled: true,
+                        backgroundColor: AppColors.card(context),
+                        builder: (c) => SoundSheet(current: s.alarmSound, palette: brandPalette()),
+                      );
+                      await AlarmBridge.stopPreview();
+                      if (r != null) s.setAlarmDefaults(sound: r.$1, soundTitle: r.$2);
+                    },
+                  ),
+                  const Divider(),
+                  _SwitchRow(
+                    icon: Icons.trending_up_rounded,
+                    title: 'Нарастающая громкость',
+                    value: s.alarmRamp,
+                    onChanged: (v) => s.setAlarmDefaults(ramp: v),
+                  ),
+                  _SwitchRow(
+                    icon: Icons.vibration_rounded,
+                    title: 'Вибрация',
+                    value: s.alarmVibrate,
+                    onChanged: (v) => s.setAlarmDefaults(vibrate: v),
+                  ),
+                  const Divider(),
+                  const SizedBox(height: 10),
+                  Text('Отложить на', style: th.textTheme.titleSmall),
+                  const SizedBox(height: 10),
+                  ChoiceRow<int>(
+                    value: s.alarmSnooze,
+                    palette: brandPalette(),
+                    options: const {5: '5 мин', 10: '10 мин', 15: '15 мин', 20: '20 мин'},
+                    onChanged: (v) => s.setAlarmDefaults(snooze: v),
                   ),
                 ],
               ),
@@ -582,6 +708,50 @@ class _WidgetStyleCardState extends State<_WidgetStyleCard> {
               onChangeEnd: (_) => _commit(),
             ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Строка настройки с переключателем.
+class _SwitchRow extends StatelessWidget {
+  const _SwitchRow({
+    required this.icon,
+    required this.title,
+    required this.value,
+    required this.onChanged,
+    this.hint,
+  });
+
+  final IconData icon;
+  final String title;
+  final String? hint;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final th = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Icon(icon, color: th.colorScheme.onSurfaceVariant),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: th.textTheme.bodyLarge),
+                if (hint != null)
+                  Text(hint!,
+                      style: th.textTheme.bodySmall
+                          ?.copyWith(color: th.colorScheme.onSurfaceVariant)),
+              ],
+            ),
+          ),
+          Switch(value: value, onChanged: onChanged),
         ],
       ),
     );

@@ -42,6 +42,15 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
   late int _cycleOn;
   late int _cycleOff;
   late CarryMode _carry;
+  bool _carryTouched = false;
+
+  /// Привязка к главной цели: id, направление (−1 до, 0 в тот же день, 1 после), число дней.
+  String? _parentId;
+  int _offsetDir = -1;
+  int _offsetN = 1;
+
+  /// «Выполнить до» — минуты от полуночи, null — до конца дня.
+  int? _due;
   String? _error;
   bool _saving = false;
 
@@ -54,19 +63,28 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
     final t = todayDay();
     _title = TextEditingController(text: g?.title ?? '');
     _count = TextEditingController(text: (g?.targetCount ?? 30).toString());
-    _repeat = g?.repeat ?? RepeatType.daily;
+    final defs = AppSettings.instance;
+    _repeat = g?.repeat ?? defs.defaultRepeat;
     _weekdays = {...?g?.weekdays};
     if (_weekdays.isEmpty) _weekdays = {t.weekday};
     _start = g?.startDate ?? t;
     _deadline = g?.deadlineType ?? DeadlineType.none;
     _end = g?.endDate ?? addDays(t, 29);
-    _reminder = g == null ? 9 * 60 : g.reminderMinutes;
+    _reminder = g == null
+        ? (defs.defaultReminderOn ? defs.defaultReminderMinutes : null)
+        : g.reminderMinutes;
+    _due = g == null ? (defs.defaultDueOn ? defs.defaultDueMinutes : null) : g.dueMinutes;
+    _parentId = g?.parentId;
+    if (g != null && g.parentId != null) {
+      _offsetDir = g.offsetDays.sign;
+      _offsetN = g.offsetDays == 0 ? 1 : g.offsetDays.abs();
+    }
     _color = g?.colorIndex ?? (widget.store.goals.length % goalPalettes.length);
     _icon = g?.icon ?? 'target';
     _customColor = g?.customColor;
     _cycleOn = g?.cycleOn ?? 2;
     _cycleOff = g?.cycleOff ?? 2;
-    _carry = g?.carry ?? AppSettings.instance.defaultCarry;
+    _carry = g?.carry ?? defs.defaultCarry;
   }
 
   @override
@@ -170,23 +188,90 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
     if (key != null) setState(() => _icon = key);
   }
 
+  Future<void> _pickDue() async {
+    final r = await pickTimeMinutes(context, current: _due ?? 21 * 60, title: 'Выполнить до');
+    if (r != null) setState(() => _due = r);
+  }
+
+  /// Выбор главной цели, к которой привязана эта.
+  Future<void> _pickParent() async {
+    final options = widget.store.parentCandidates(widget.goal);
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      backgroundColor: AppColors.card(context),
+      builder: (c) {
+        final th = Theme.of(c);
+        return ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(c).height * 0.7),
+          child: ListView(
+            shrinkWrap: true,
+            padding: EdgeInsets.fromLTRB(16, 0, 16, 16 + MediaQuery.paddingOf(c).bottom),
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
+                child: Text('Главная цель', style: th.textTheme.titleLarge),
+              ),
+              ListTile(
+                leading: const Icon(Icons.link_off_rounded),
+                title: const Text('Без связи'),
+                subtitle: const Text('Самостоятельная цель со своим графиком'),
+                onTap: () => Navigator.pop(c, ''),
+              ),
+              for (final g in options)
+                ListTile(
+                  leading: GoalBadge.of(g, size: 40),
+                  title: Text(g.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+                  subtitle: Text(scheduleLine(g), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  trailing: g.id == _parentId ? const Icon(Icons.check_rounded) : null,
+                  onTap: () => Navigator.pop(c, g.id),
+                ),
+              if (options.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Text(
+                    widget.goal != null && widget.store.children(widget.goal!).isNotEmpty
+                        ? 'К этой цели уже привязаны другие, поэтому сама она привязанной быть не может.'
+                        : 'Пока нет целей, к которым можно привязаться.',
+                    style: th.textTheme.bodyMedium?.copyWith(color: th.colorScheme.onSurfaceVariant),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+    if (picked == null) return;
+    setState(() {
+      _parentId = picked.isEmpty ? null : picked;
+      // Подготовку к главной цели удобнее не переносить молча, а спрашивать.
+      if (_parentId != null && !_carryTouched) _carry = CarryMode.ask;
+    });
+  }
+
   void _fail(String msg) => setState(() => _error = msg);
 
   Future<void> _save() async {
     if (_saving) return;
     final title = _title.text.trim();
     if (title.isEmpty) return _fail('Введите название цели');
-    if (_repeat == RepeatType.weekdays && _weekdays.isEmpty) {
+    final linked = _parentId != null && widget.store.byId(_parentId!) != null;
+    final offset = linked ? _offsetDir * _offsetN : 0;
+    if (!linked && _repeat == RepeatType.weekdays && _weekdays.isEmpty) {
       return _fail('Выберите хотя бы один день недели');
     }
+    if (_reminder != null && _due != null && _reminder! >= _due!) {
+      return _fail('Напоминание должно быть раньше времени «Выполнить до»');
+    }
     int? count;
-    if (_deadline == DeadlineType.count) {
+    if (!linked && _deadline == DeadlineType.count) {
       count = int.tryParse(_count.text.trim());
       if (count == null || count < 1 || count > 10000) {
         return _fail('Количество раз — число от 1 до 10000');
       }
     }
-    if (_deadline == DeadlineType.date && _end.isBefore(_start)) {
+    if (!linked && _deadline == DeadlineType.date && _end.isBefore(_start)) {
       return _fail('Дата окончания раньше даты начала');
     }
 
@@ -205,10 +290,13 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
         repeat: _repeat,
         weekdays: {..._weekdays},
         startDate: _start,
-        deadlineType: _deadline,
-        endDate: _deadline == DeadlineType.date ? _end : null,
+        deadlineType: linked ? DeadlineType.none : _deadline,
+        endDate: !linked && _deadline == DeadlineType.date ? _end : null,
         targetCount: count,
         reminderMinutes: _reminder,
+        dueMinutes: _due,
+        parentId: linked ? _parentId : null,
+        offsetDays: offset,
         nextDue: _start,
         colorIndex: _color,
         customColor: _customColor,
@@ -219,7 +307,9 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
       );
       await store.add(g);
     } else {
-      final patternChanged = old.repeat != _repeat ||
+      final patternChanged = old.parentId != (linked ? _parentId : null) ||
+          old.offsetDays != offset ||
+          old.repeat != _repeat ||
           old.startDate != _start ||
           (_repeat == RepeatType.weekdays &&
               (old.weekdays.length != _weekdays.length ||
@@ -231,10 +321,13 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
         ..repeat = _repeat
         ..weekdays = {..._weekdays}
         ..startDate = _start
-        ..deadlineType = _deadline
-        ..endDate = _deadline == DeadlineType.date ? _end : null
+        ..deadlineType = linked ? DeadlineType.none : _deadline
+        ..endDate = !linked && _deadline == DeadlineType.date ? _end : null
         ..targetCount = count
         ..reminderMinutes = _reminder
+        ..dueMinutes = _due
+        ..parentId = linked ? _parentId : null
+        ..offsetDays = offset
         ..colorIndex = _color
         ..customColor = _customColor
         ..icon = _icon
@@ -317,6 +410,49 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
             ),
           ),
 
+          // ---- Связь с главной целью ----
+          const SectionTitle('Связь с другой целью'),
+          AppCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SettingTile(
+                  icon: Icons.link_rounded,
+                  title: 'Главная цель',
+                  value: _parentId == null
+                      ? 'Нет'
+                      : (widget.store.byId(_parentId!)?.title ?? 'Нет'),
+                  onTap: _pickParent,
+                ),
+                if (_parentId != null) ...[
+                  ChoiceRow<int>(
+                    value: _offsetDir,
+                    palette: pal,
+                    options: const {-1: 'До неё', 0: 'В тот же день', 1: 'После неё'},
+                    onChanged: (v) => setState(() => _offsetDir = v),
+                  ),
+                  if (_offsetDir != 0) ...[
+                    const SizedBox(height: 12),
+                    StepperRow(
+                      label: _offsetDir < 0 ? 'За сколько' : 'Через сколько',
+                      value: _offsetN,
+                      palette: pal,
+                      onMinus: _offsetN > 1 ? () => setState(() => _offsetN--) : null,
+                      onPlus: _offsetN < 60 ? () => setState(() => _offsetN++) : null,
+                    ),
+                  ],
+                  const SizedBox(height: 10),
+                  Text(
+                    'Своего графика у этой цели нет: она идёт за каждым днём главной. '
+                    'Перенесёте или отмените главную — эта сдвинется или отменится вместе с ней.',
+                    style: th.textTheme.bodySmall?.copyWith(color: th.colorScheme.onSurfaceVariant),
+                  ),
+                ],
+              ],
+            ),
+          ),
+
+          if (_parentId == null) ...[
           // ---- Периодичность ----
           const SectionTitle('Периодичность'),
           AppCard(
@@ -448,13 +584,66 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
             ),
           ),
 
+          ],
+
+          // ---- Срок в течение дня ----
+          const SectionTitle('Время выполнения'),
+          AppCard(
+            padding: const EdgeInsets.fromLTRB(16, 6, 8, 6),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.hourglass_bottom_rounded, color: th.colorScheme.onSurfaceVariant),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Выполнить до времени', style: th.textTheme.bodyLarge),
+                          Text(
+                            _due == null
+                                ? 'Сейчас — до конца дня'
+                                : 'Не отмечена к этому времени — сработает выбор ниже',
+                            style: th.textTheme.bodySmall
+                                ?.copyWith(color: th.colorScheme.onSurfaceVariant),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Switch(
+                      value: _due != null,
+                      onChanged: (v) => setState(
+                          () => _due = v ? AppSettings.instance.defaultDueMinutes : null),
+                    ),
+                  ],
+                ),
+                if (_due != null) ...[
+                  const Divider(),
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: SettingTile(
+                      icon: Icons.schedule_rounded,
+                      title: 'Выполнить до',
+                      value: formatTime(_due!),
+                      onTap: _pickDue,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+
           // ---- Пропуск ----
-          const SectionTitle('Если пропустить день'),
+          const SectionTitle('Если не выполнена в срок'),
           AppCard(
             child: CarryPicker(
               value: _carry,
               palette: pal,
-              onChanged: (v) => setState(() => _carry = v),
+              onChanged: (v) => setState(() {
+                _carry = v;
+                _carryTouched = true;
+              }),
             ),
           ),
 
@@ -481,7 +670,8 @@ class _EditGoalScreenState extends State<EditGoalScreen> {
                     ),
                     Switch(
                       value: _reminder != null,
-                      onChanged: (v) => setState(() => _reminder = v ? 9 * 60 : null),
+                      onChanged: (v) => setState(
+                          () => _reminder = v ? AppSettings.instance.defaultReminderMinutes : null),
                     ),
                   ],
                 ),

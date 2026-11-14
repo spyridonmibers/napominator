@@ -19,7 +19,10 @@ Future<void> main() async {
   } catch (_) {}
   final store = GoalStore();
   try {
-    await Notifications.instance.init(onDone: (id) => store.completeById(id));
+    await Notifications.instance.init(
+      onDone: (id) => store.completeById(id),
+      onMiss: (id, choice) => store.resolve(id, choice),
+    );
   } catch (_) {
     // Приложение работает и без уведомлений.
   }

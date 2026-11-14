@@ -229,4 +229,163 @@ void main() {
     applyEdit(g, d(1), patternChanged: false);
     expect(g.nextDue, d(1));
   });
+
+  // ---------- срок в течение дня ----------
+
+  test('выполнить до времени: перенос на завтра сразу после срока', () {
+    final g = make(carry: CarryMode.keep)..dueMinutes = 18 * 60;
+    expect(normalize(g, DateTime(2026, 11, 9, 17, 59)), isFalse);
+    expect(normalize(g, DateTime(2026, 11, 9, 18, 0)), isTrue);
+    expect(g.nextDue, d(1));
+    expect(g.missedLog, [d(0)]);
+    // сегодня её уже не отметить
+    expect(complete(g, DateTime(2026, 11, 9, 19, 0)), isFalse);
+    expect(complete(g, DateTime(2026, 11, 10, 9, 0)), isTrue);
+  });
+
+  test('выполнить до времени: без переноса', () {
+    final g = make(repeat: RepeatType.everyOtherDay, carry: CarryMode.skip)..dueMinutes = 12 * 60;
+    normalize(g, DateTime(2026, 11, 9, 12, 30));
+    expect(g.nextDue, d(2));
+    expect(g.missedDays, 1);
+  });
+
+  // ---------- «спрашивать» ----------
+
+  test('спросить: цель ждёт решения, потом перенос со сдвигом', () {
+    final g = make(repeat: RepeatType.everyOtherDay, carry: CarryMode.ask);
+    final all = [g];
+    expect(normalizeAll(all, d(1)), isTrue);
+    expect(g.awaiting, isTrue);
+    expect(isDueToday(g, d(1)), isFalse);
+    expect(complete(g, d(1)), isFalse);
+    expect(resolveGoal(all, g, d(1), CarryMode.shift), isTrue);
+    expect(g.awaiting, isFalse);
+    expect(g.nextDue, d(1));
+    expect(g.shift, 1);
+    complete(g, d(1));
+    expect(g.nextDue, d(3));
+  });
+
+  test('спросить: отмена', () {
+    final g = make(repeat: RepeatType.everyOtherDay, carry: CarryMode.ask);
+    final all = [g];
+    normalizeAll(all, d(1));
+    resolveGoal(all, g, d(1), CarryMode.skip);
+    expect(g.nextDue, d(2));
+    expect(g.missedLog, [d(0)]);
+  });
+
+  // ---------- связанные цели ----------
+
+  Goal child(Goal parent, int offset, {CarryMode carry = CarryMode.keep, String id = 'c'}) {
+    final c = Goal(
+      id: id,
+      notifId: 2,
+      title: 'Подготовка',
+      repeat: RepeatType.daily,
+      weekdays: {},
+      startDate: mon,
+      deadlineType: DeadlineType.none,
+      nextDue: mon,
+      carry: carry,
+      parentId: parent.id,
+      offsetDays: offset,
+    )..parent = parent;
+    initGoal(c, mon);
+    return c;
+  }
+
+  test('привязанная цель идёт за днями главной со смещением', () {
+    final p = make(repeat: RepeatType.weekdays, weekdays: {3, 5}); // Ср, Пт
+    final c = child(p, -1);
+    expect(c.nextDue, d(1)); // вторник — за день до среды
+    expect(c.linkDay, d(2));
+    complete(c, d(1));
+    expect(c.nextDue, d(3)); // четверг — за день до пятницы
+    final after = child(p, 2, id: 'a');
+    expect(after.nextDue, d(4)); // через 2 дня после среды
+  });
+
+  test('сдвиг главной сдвигает привязанные', () {
+    final p = make(repeat: RepeatType.weekdays, weekdays: {3, 5});
+    final c = child(p, -1);
+    final all = [p, c];
+    complete(c, d(1)); // подготовка к среде сделана, следующая — чт (к пятнице)
+    normalizeAll(all, d(3)); // среду главная пропустила → переехала на четверг, график +1
+    expect(p.nextDue, d(3));
+    expect(p.shift, 1);
+    expect(c.nextDue, d(4)); // подготовка к субботе — в пятницу
+    expect(c.linkDay, d(5));
+  });
+
+  test('разовая отмена главной отменяет привязанные', () {
+    final p = make(repeat: RepeatType.weekdays, weekdays: {3, 5}, carry: CarryMode.skip);
+    final c = child(p, 0);
+    final all = [p, c];
+    expect(c.nextDue, d(2));
+    normalizeAll(all, d(3)); // среда пропущена и не переносится
+    expect(p.nextDue, d(4));
+    expect(c.nextDue, d(4));
+    expect(c.missedLog, isEmpty); // отменена вместе с главной, а не пропущена
+  });
+
+  test('«пропустить этот раз» у главной', () {
+    final p = make(repeat: RepeatType.weekdays, weekdays: {3, 5});
+    final c = child(p, -1);
+    final all = [p, c];
+    expect(skipGoalOnce(all, p, d(0)), isTrue);
+    expect(p.nextDue, d(4));
+    expect(c.nextDue, d(3));
+  });
+
+  test('привязанная не выполнена: выбор «перенести с графиком» сдвигает главную', () {
+    final p = make(repeat: RepeatType.weekdays, weekdays: {3, 5});
+    final c = child(p, -1, carry: CarryMode.ask);
+    final all = [p, c];
+    normalizeAll(all, d(2)); // вторник прошёл
+    expect(c.awaiting, isTrue);
+    expect(p.nextDue, d(2));
+    resolveGoal(all, c, d(2), CarryMode.shift);
+    expect(c.nextDue, d(2)); // делаем сегодня
+    expect(p.nextDue, d(3)); // главная переехала на четверг
+    expect(p.shift, 1);
+  });
+
+  test('привязанная не выполнена: «перенести» без графика и «отменить»', () {
+    final p = make(repeat: RepeatType.weekdays, weekdays: {3, 5});
+    final c = child(p, -1, carry: CarryMode.ask);
+    final all = [p, c];
+    normalizeAll(all, d(2));
+    resolveGoal(all, c, d(2), CarryMode.keep);
+    expect(c.nextDue, d(2));
+    expect(p.nextDue, d(2));
+    expect(p.shift, 0);
+
+    final c2 = child(p, -1, carry: CarryMode.ask, id: 'c2');
+    final all2 = [p, c2];
+    normalizeAll(all2, d(2));
+    resolveGoal(all2, c2, d(2), CarryMode.skip);
+    expect(c2.nextDue, d(3)); // следующая — к пятнице
+  });
+
+  test('главная завершена — привязанные завершаются', () {
+    final p = make(deadline: DeadlineType.count, count: 1);
+    final c = child(p, 0);
+    final all = [p, c];
+    complete(c, d(0));
+    complete(p, d(0));
+    normalizeAll(all, d(1));
+    expect(p.finished, isTrue);
+    expect(c.finished, isTrue);
+  });
+
+  test('архив главной уводит привязанные', () {
+    final p = make();
+    final c = child(p, 0);
+    final all = [p, c];
+    p.archived = true;
+    normalizeAll(all, d(0));
+    expect(c.archived, isTrue);
+  });
 }

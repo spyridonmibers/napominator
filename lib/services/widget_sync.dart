@@ -26,10 +26,9 @@ Future<void> widgetBackgroundCallback(Uri? uri) async {
   DartPluginRegistrant.ensureInitialized();
   final repo = GoalRepository();
   final goals = await repo.load();
-  final t = todayDay();
-  for (final g in goals) {
-    normalize(g, t);
-  }
+  final now = DateTime.now();
+  final t = dayOf(now);
+  normalizeAll(goals, now);
   Goal? goal;
   for (final g in goals) {
     if (g.id == id) goal = g;
@@ -38,8 +37,9 @@ Future<void> widgetBackgroundCallback(Uri? uri) async {
     if (doneOn(goal, t)) {
       undoToday(goal, t);
     } else {
-      complete(goal, t);
+      complete(goal, now);
     }
+    normalizeAll(goals, now);
   }
   await repo.save(goals);
   await WidgetSync.update(goals);
@@ -109,7 +109,7 @@ class WidgetSync {
       for (final g in goals) {
         final done = doneOn(g, t);
         final active = isActive(g);
-        if ((active && !g.nextDue.isAfter(t)) || (done && (active || g.finished))) {
+        if ((active && !g.awaiting && !g.nextDue.isAfter(t)) || (done && (active || g.finished))) {
           today.add(g);
         }
         if (wouldBeDue(g, tomorrow)) next.add(g);

@@ -8,6 +8,7 @@ import '../models/day.dart';
 import '../models/goal.dart';
 import '../state/goal_store.dart';
 import 'format.dart';
+import 'miss_choice.dart';
 import 'theme.dart';
 import 'widgets.dart';
 
@@ -99,6 +100,7 @@ class TodayScreen extends StatelessWidget {
         });
         final total = due.length + done.length;
         final hasActive = store.activeCount > 0;
+        final waiting = store.awaiting;
 
         return CustomScrollView(
           slivers: [
@@ -120,8 +122,8 @@ class TodayScreen extends StatelessWidget {
                   icon: Icons.track_changes_rounded,
                   title: 'Поставьте первую цель',
                   text: 'Отмечайте выполнение каждый день. '
-                      'Пропустили — цель переедет на завтра, '
-                      'а график сдвинется на день.',
+                      'Не успели — цель переедет на завтра, отменится '
+                      'или спросит, что делать: как настроите.',
                   action: FilledButton.icon(
                     onPressed: onAdd,
                     icon: const Icon(Icons.add_rounded),
@@ -134,6 +136,14 @@ class TodayScreen extends StatelessWidget {
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 120),
                 sliver: SliverList.list(
                   children: [
+                    if (waiting.isNotEmpty) ...[
+                      const SectionTitle('Не выполнено — что делаем?'),
+                      for (final g in waiting)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: MissChoiceCard(store: store, goal: g, onTap: () => onOpen(g)),
+                        ),
+                    ],
                     SectionTitle(
                       'Нужно сделать',
                       trailing: AddGoalButton(
@@ -302,6 +312,20 @@ class _TodayCard extends StatelessWidget {
                       Pill(
                         icon: Icons.notifications_rounded,
                         text: formatTime(g.reminderMinutes!),
+                        color: th.colorScheme.onSurfaceVariant,
+                      ),
+                    if (g.dueMinutes != null && !done)
+                      Pill(
+                        icon: Icons.hourglass_bottom_rounded,
+                        text: 'до ${formatTime(g.dueMinutes!)}',
+                        color: pal.main,
+                      ),
+                    if (g.parent != null)
+                      Pill(
+                        icon: Icons.link_rounded,
+                        text: g.parent!.title.length > 18
+                            ? '${g.parent!.title.substring(0, 17)}…'
+                            : g.parent!.title,
                         color: th.colorScheme.onSurfaceVariant,
                       ),
                     if (!done && g.missedDays > 0 && g.carry != CarryMode.skip)

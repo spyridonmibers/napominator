@@ -20,6 +20,11 @@ const summaryId = 1;
 /// Если целей больше — в сводке только количество.
 const _summaryMaxLines = 5;
 const _actionDone = 'done';
+const _actionMissSkip = 'miss_skip';
+const _actionMissKeep = 'miss_keep';
+const _actionMissShift = 'miss_shift';
+const _iosMissCategory = 'miss';
+const _missChannelId = 'goal_missed';
 const _iosCategory = 'goal';
 const _exactAskedFlag = 'exact_alarm_asked';
 
@@ -35,21 +40,37 @@ const _androidLimit = 400;
 const _iosRepeatHours = 2;
 const _iosMaxPerDay = 9;
 
-/// Нажатие «Выполнено» в уведомлении, когда приложение закрыто.
+/// Ответ из уведомления «цель не выполнена» → вариант переноса.
+CarryMode? missChoice(String? actionId) => switch (actionId) {
+      _actionMissSkip => CarryMode.skip,
+      _actionMissKeep => CarryMode.keep,
+      _actionMissShift => CarryMode.shift,
+      _ => null,
+    };
+
+/// Нажатие кнопки в уведомлении, когда приложение закрыто:
+/// «Выполнено» либо выбор для невыполненной цели.
 @pragma('vm:entry-point')
 void notificationTapBackground(NotificationResponse response) async {
-  if (response.actionId != _actionDone || response.payload == null) return;
+  final choice = missChoice(response.actionId);
+  if ((response.actionId != _actionDone && choice == null) || response.payload == null) return;
   DartPluginRegistrant.ensureInitialized();
   final repo = GoalRepository();
   final goals = await repo.load();
+  final now = DateTime.now();
+  normalizeAll(goals, now);
   Goal? goal;
   for (final g in goals) {
     if (g.id == response.payload) goal = g;
   }
   if (goal == null) return;
-  if (complete(goal, todayDay())) {
-    await repo.save(goals);
+  if (choice != null) {
+    resolveGoal(goals, goal, now, choice);
+  } else {
+    complete(goal, now);
   }
+  normalizeAll(goals, now);
+  await repo.save(goals);
   await WidgetSync.update(goals);
   try {
     await Notifications.instance.init();
@@ -61,10 +82,13 @@ void notificationTapBackground(NotificationResponse response) async {
 }
 
 class _Entry {
-  _Entry(this.id, this.at, this.goal);
+  _Entry(this.id, this.at, this.goal, {this.until});
   final int id;
   final DateTime at;
   final Goal goal;
+
+  /// Срок «выполнить до»: в этот момент напоминание само исчезает (Android).
+  final DateTime? until;
 }
 
 class Notifications {
@@ -78,6 +102,7 @@ class Notifications {
   /// на iPhone — Live Activity (если она доступна).
   bool useSummary = true;
   void Function(String goalId)? _onDone;
+  void Function(String goalId, CarryMode choice)? _onMiss;
 
   bool get _isIOS => Platform.isIOS;
 
@@ -85,8 +110,12 @@ class Notifications {
       _plugin.resolvePlatformSpecificImplementation<
           AndroidFlutterLocalNotificationsPlugin>();
 
-  Future<void> init({void Function(String goalId)? onDone}) async {
+  Future<void> init({
+    void Function(String goalId)? onDone,
+    void Function(String goalId, CarryMode choice)? onMiss,
+  }) async {
     if (onDone != null) _onDone = onDone;
+    if (onMiss != null) _onMiss = onMiss;
     if (_initialized) return;
     tzdata.initializeTimeZones();
 
@@ -102,13 +131,28 @@ class Notifications {
             DarwinNotificationAction.plain(_actionDone, 'Выполнено'),
           ],
         ),
+        DarwinNotificationCategory(
+          _iosMissCategory,
+          actions: <DarwinNotificationAction>[
+            DarwinNotificationAction.plain(_actionMissKeep, 'Перенести'),
+            DarwinNotificationAction.plain(_actionMissShift, 'Перенести вместе с графиком'),
+            DarwinNotificationAction.plain(_actionMissSkip, 'Отменить',
+                options: <DarwinNotificationActionOption>{
+                  DarwinNotificationActionOption.destructive,
+                }),
+          ],
+        ),
       ],
     );
 
     await _plugin.initialize(
       InitializationSettings(android: android, iOS: darwin),
       onDidReceiveNotificationResponse: (r) {
-        if (r.actionId == _actionDone && r.payload != null) {
+        if (r.payload == null) return;
+        final choice = missChoice(r.actionId);
+        if (choice != null) {
+          _onMiss?.call(r.payload!, choice);
+        } else if (r.actionId == _actionDone) {
           _onDone?.call(r.payload!);
         }
       },
@@ -136,8 +180,9 @@ class Notifications {
     }
   }
 
-  NotificationDetails _details() => NotificationDetails(
-        android: const AndroidNotificationDetails(
+  /// [timeoutMs] — через сколько напоминание само исчезнет (срок «выполнить до»).
+  NotificationDetails _details([int? timeoutMs]) => NotificationDetails(
+        android: AndroidNotificationDetails(
           _channelId,
           'Напоминания о целях',
           channelDescription: 'Висят, пока цель на сегодня не отмечена',
@@ -147,7 +192,8 @@ class Notifications {
           autoCancel: false,
           onlyAlertOnce: true,
           category: AndroidNotificationCategory.reminder,
-          actions: <AndroidNotificationAction>[
+          timeoutAfter: timeoutMs,
+          actions: const <AndroidNotificationAction>[
             AndroidNotificationAction(
               _actionDone,
               'Выполнено',
@@ -162,6 +208,49 @@ class Notifications {
         ),
       );
 
+  /// Уведомление «цель не выполнена» с выбором: перенести / со сдвигом / отменить.
+  NotificationDetails _missDetails() => const NotificationDetails(
+        android: AndroidNotificationDetails(
+          _missChannelId,
+          'Невыполненные цели',
+          channelDescription: 'Выбор, что делать с целью, которую не успели выполнить',
+          importance: Importance.high,
+          priority: Priority.high,
+          autoCancel: false,
+          category: AndroidNotificationCategory.reminder,
+          actions: <AndroidNotificationAction>[
+            AndroidNotificationAction(_actionMissKeep, 'Перенести',
+                showsUserInterface: false, cancelNotification: true),
+            AndroidNotificationAction(_actionMissShift, 'С графиком',
+                showsUserInterface: false, cancelNotification: true),
+            AndroidNotificationAction(_actionMissSkip, 'Отменить',
+                showsUserInterface: false, cancelNotification: true),
+          ],
+        ),
+        iOS: DarwinNotificationDetails(
+          categoryIdentifier: _iosMissCategory,
+          threadIdentifier: 'miss',
+        ),
+      );
+
+  static int _missId(Goal g) => 1500000000 + g.notifId;
+
+  /// Момент, когда истекает срок выполнения за день [day].
+  static DateTime _deadlineOf(Goal g, DateTime day) {
+    final m = g.dueMinutes;
+    return m == null
+        ? DateTime(day.year, day.month, day.day + 1)
+        : DateTime(day.year, day.month, day.day, m ~/ 60, m % 60);
+  }
+
+  String _missBody(Goal g) {
+    final p = g.parent;
+    if (p != null && g.offsetDays < 0) {
+      return 'Это подготовка к цели «${p.title}». Перенести или отменить?';
+    }
+    return 'Перенести на следующий день или отменить?';
+  }
+
   List<int> _allIds(Goal g) {
     final ids = <int>[];
     for (var d = 0; d < _daysAhead; d++) {
@@ -173,6 +262,7 @@ class Notifications {
         ids.add(g.notifId * 10 + d);
       }
     }
+    ids.add(_missId(g));
     return ids;
   }
 
@@ -208,10 +298,16 @@ class Notifications {
         final day = addDays(t, d);
         if (!wouldBeDue(g, day) || doneOn(g, day)) continue;
         final first = DateTime(day.year, day.month, day.day, h, m);
+        // Напоминать после срока «выполнить до» уже незачем.
+        final until = g.dueMinutes == null ? null : _deadlineOf(g, day);
+        if (until != null && !first.isBefore(until)) continue;
         final times = <DateTime>[first];
         if (_isIOS) {
           var x = first.add(const Duration(hours: _iosRepeatHours));
-          while (x.day == first.day && x.hour < 23 && times.length < _iosMaxPerDay) {
+          while (x.day == first.day &&
+              x.hour < 23 &&
+              times.length < _iosMaxPerDay &&
+              (until == null || x.isBefore(until))) {
             times.add(x);
             x = x.add(const Duration(hours: _iosRepeatHours));
           }
@@ -219,29 +315,50 @@ class Notifications {
         for (var k = 0; k < times.length; k++) {
           final id = _isIOS ? g.notifId * 100 + d * 10 + k : g.notifId * 10 + d;
           if (times[k].isAfter(now)) {
-            entries.add(_Entry(id, times[k], g));
-          } else if (!_isIOS && d == 0) {
+            entries.add(_Entry(id, times[k], g, until: until));
+          } else if (!_isIOS && d == 0 && (until == null || until.isAfter(now))) {
             // Время уже прошло, а цель не выполнена — уведомление должно висеть.
-            showNow.add(_Entry(id, times[k], g));
+            showNow.add(_Entry(id, times[k], g, until: until));
           }
         }
       }
     }
 
-    final details = _details();
+    int? timeout(_Entry e, DateTime from) =>
+        e.until == null ? null : e.until!.difference(from).inMilliseconds;
 
-    if (showNow.isNotEmpty) {
-      final active = <int>{};
-      try {
-        for (final a in await _android?.getActiveNotifications() ??
-            const <ActiveNotification>[]) {
-          if (a.id != null) active.add(a.id!);
+    final active = <int>{};
+    try {
+      for (final a in await _plugin.getActiveNotifications()) {
+        if (a.id != null) active.add(a.id!);
+      }
+    } catch (_) {}
+
+    for (final e in showNow) {
+      if (active.contains(e.id)) continue;
+      await _plugin.show(e.id, e.goal.title, _body(e.goal), _details(timeout(e, now)),
+          payload: e.goal.id);
+    }
+
+    // «Цель не выполнена — что делать?» для целей с вариантом «спрашивать».
+    final missLater = <_Entry>[];
+    for (final g in goals) {
+      if (!isActive(g) || g.carry != CarryMode.ask) continue;
+      final id = _missId(g);
+      if (g.awaiting) {
+        if (!active.contains(id)) {
+          await _plugin.show(id, 'Не выполнено: ${g.title}', _missBody(g), _missDetails(),
+              payload: g.id);
         }
-      } catch (_) {}
-      for (final e in showNow) {
-        if (active.contains(e.id)) continue;
-        await _plugin.show(e.id, e.goal.title, _body(e.goal), details,
-            payload: e.goal.id);
+        continue;
+      }
+      if (doneOn(g, g.nextDue)) continue;
+      // Без срока «выполнить до» спрашиваем не в полночь, а утром следующего дня.
+      final at = g.dueMinutes == null
+          ? DateTime(g.nextDue.year, g.nextDue.month, g.nextDue.day + 1, 9)
+          : _deadlineOf(g, g.nextDue);
+      if (at.isAfter(now) && at.difference(now).inDays < _daysAhead) {
+        missLater.add(_Entry(id, at, g));
       }
     }
 
@@ -261,13 +378,27 @@ class Notifications {
       await _updateSummary(goals, mode);
     } catch (_) {}
 
-    for (final e in entries.take(limit - 1)) {
+    missLater.sort((a, b) => a.at.compareTo(b.at));
+    final missCount = missLater.length > 15 ? 15 : missLater.length;
+    for (final e in missLater.take(missCount)) {
+      await _plugin.zonedSchedule(
+        e.id,
+        'Не выполнено: ${e.goal.title}',
+        _missBody(e.goal),
+        tz.TZDateTime.from(e.at, tz.UTC),
+        _missDetails(),
+        androidScheduleMode: mode,
+        payload: e.goal.id,
+      );
+    }
+
+    for (final e in entries.take(limit - 1 - missCount)) {
       await _plugin.zonedSchedule(
         e.id,
         e.goal.title,
         _body(e.goal),
         tz.TZDateTime.from(e.at, tz.UTC),
-        details,
+        _details(timeout(e, e.at)),
         androidScheduleMode: mode,
         payload: e.goal.id,
       );
@@ -334,7 +465,7 @@ class Notifications {
     for (final g in goals) {
       if (doneOn(g, t) && (isActive(g) || g.finished)) {
         done++;
-      } else if (isActive(g) && !g.nextDue.isAfter(t)) {
+      } else if (isActive(g) && !g.awaiting && !g.nextDue.isAfter(t)) {
         left.add(g);
       }
     }

@@ -56,6 +56,20 @@ class AppSettings extends ChangeNotifier {
   /// Свой акцентный цвет (ARGB) вместо одного из 10.
   int? accentCustom;
 
+  // ---- По умолчанию для новых целей ----
+  bool defaultReminderOn = true;
+  int defaultReminderMinutes = 9 * 60;
+  bool defaultDueOn = false;
+  int defaultDueMinutes = 21 * 60;
+  RepeatType defaultRepeat = RepeatType.daily;
+
+  // ---- По умолчанию для новых будильников ----
+  String alarmSound = 'builtin:soft';
+  String alarmSoundTitle = 'Мягкое утро';
+  int alarmSnooze = 10;
+  bool alarmRamp = true;
+  bool alarmVibrate = true;
+
   bool widgetCustom = false;
   double widgetHue = 250;
   double widgetTone = 0.15;
@@ -70,10 +84,64 @@ class AppSettings extends ChangeNotifier {
     defaultCarry = CarryMode.values.asNameMap()[p.getString(_kCarry)] ?? CarryMode.shift;
     lockScreen = p.getBool(kLockScreen) ?? true;
     accentCustom = p.getInt(_kAccentCustom);
+    defaultReminderOn = p.getBool('def_reminder_on') ?? true;
+    defaultReminderMinutes = p.getInt('def_reminder_min') ?? 9 * 60;
+    defaultDueOn = p.getBool('def_due_on') ?? false;
+    defaultDueMinutes = p.getInt('def_due_min') ?? 21 * 60;
+    defaultRepeat = RepeatType.values.asNameMap()[p.getString('def_repeat')] ?? RepeatType.daily;
+    alarmSound = p.getString('def_alarm_sound') ?? 'builtin:soft';
+    alarmSoundTitle = p.getString('def_alarm_sound_title') ?? 'Мягкое утро';
+    alarmSnooze = p.getInt('def_alarm_snooze') ?? 10;
+    alarmRamp = p.getBool('def_alarm_ramp') ?? true;
+    alarmVibrate = p.getBool('def_alarm_vibrate') ?? true;
     widgetCustom = p.getBool(kWidgetCustom) ?? false;
     widgetHue = p.getDouble(kWidgetHue) ?? 250;
     widgetTone = p.getDouble(kWidgetTone) ?? 0.15;
     widgetOpacity = p.getDouble(kWidgetOpacity) ?? 1.0;
+  }
+
+  /// Значения по умолчанию для новых целей.
+  Future<void> setGoalDefaults({
+    bool? reminderOn,
+    int? reminderMinutes,
+    bool? dueOn,
+    int? dueMinutes,
+    RepeatType? repeat,
+  }) async {
+    if (reminderOn != null) defaultReminderOn = reminderOn;
+    if (reminderMinutes != null) defaultReminderMinutes = reminderMinutes;
+    if (dueOn != null) defaultDueOn = dueOn;
+    if (dueMinutes != null) defaultDueMinutes = dueMinutes;
+    if (repeat != null) defaultRepeat = repeat;
+    notifyListeners();
+    final p = await _prefs;
+    await p.setBool('def_reminder_on', defaultReminderOn);
+    await p.setInt('def_reminder_min', defaultReminderMinutes);
+    await p.setBool('def_due_on', defaultDueOn);
+    await p.setInt('def_due_min', defaultDueMinutes);
+    await p.setString('def_repeat', defaultRepeat.name);
+  }
+
+  /// Значения по умолчанию для новых будильников.
+  Future<void> setAlarmDefaults({
+    String? sound,
+    String? soundTitle,
+    int? snooze,
+    bool? ramp,
+    bool? vibrate,
+  }) async {
+    if (sound != null) alarmSound = sound;
+    if (soundTitle != null) alarmSoundTitle = soundTitle;
+    if (snooze != null) alarmSnooze = snooze;
+    if (ramp != null) alarmRamp = ramp;
+    if (vibrate != null) alarmVibrate = vibrate;
+    notifyListeners();
+    final p = await _prefs;
+    await p.setString('def_alarm_sound', alarmSound);
+    await p.setString('def_alarm_sound_title', alarmSoundTitle);
+    await p.setInt('def_alarm_snooze', alarmSnooze);
+    await p.setBool('def_alarm_ramp', alarmRamp);
+    await p.setBool('def_alarm_vibrate', alarmVibrate);
   }
 
   Future<void> setAccentCustom(int argb) async {

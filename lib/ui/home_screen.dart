@@ -27,6 +27,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   int _tab = 0;
   Timer? _midnight;
+  Timer? _minute;
 
   GoalStore get store => widget.store;
 
@@ -35,6 +36,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _scheduleMidnight();
+    // Раз в минуту проверяем, не истёк ли у цели срок «выполнить до».
+    _minute = Timer.periodic(const Duration(minutes: 1), (_) => store.tick());
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Notifications.instance.requestPermissions();
     });
@@ -44,6 +47,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _midnight?.cancel();
+    _minute?.cancel();
     super.dispose();
   }
 

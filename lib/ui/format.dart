@@ -50,7 +50,17 @@ String weekdaysText(Set<int> days) {
   return list.map((w) => weekdayShort[w - 1]).join(', ');
 }
 
+/// «За 2 дня до «Экзамен»» — для цели, привязанной к главной.
+String linkText(Goal g) {
+  final title = g.parent?.title ?? 'главной цели';
+  final n = g.offsetDays.abs();
+  if (g.offsetDays < 0) return 'За ${daysWord(n)} до «$title»';
+  if (g.offsetDays > 0) return 'Через ${daysWord(n)} после «$title»';
+  return 'В день цели «$title»';
+}
+
 String repeatText(Goal g) {
+  if (g.parentId != null) return linkText(g);
   switch (g.repeat) {
     case RepeatType.daily:
       return 'Каждый день';
@@ -97,7 +107,8 @@ String formatDateLong(DateTime d) =>
 
 /// Строка «Каждый день · 09:00».
 String scheduleLine(Goal g) {
-  final r = repeatText(g);
-  final m = g.reminderMinutes;
-  return m == null ? r : '$r · ${formatTime(m)}';
+  final parts = <String>[repeatText(g)];
+  if (g.reminderMinutes != null) parts.add(formatTime(g.reminderMinutes!));
+  if (g.dueMinutes != null) parts.add('до ${formatTime(g.dueMinutes!)}');
+  return parts.join(' · ');
 }

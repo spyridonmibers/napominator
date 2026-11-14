@@ -45,7 +45,20 @@ class _GoalsScreenState extends State<GoalsScreen> {
             final db = b.finishedOn ?? b.nextDue;
             return db.compareTo(da);
           });
-        final list = _tab == 0 ? active : archive;
+        // Привязанные цели показываем сразу под своей главной, с отступом.
+        List<Goal> grouped(List<Goal> src) {
+          final ids = {for (final g in src) g.id};
+          final res = <Goal>[];
+          for (final g in src) {
+            if (g.parentId != null && ids.contains(g.parentId)) continue;
+            res.add(g);
+            res.addAll(src.where((c) => c.parentId == g.id));
+          }
+          return res;
+        }
+
+        final list = grouped(_tab == 0 ? active : archive);
+        final shown = {for (final g in list) g.id};
 
         return SafeArea(
           bottom: false,
@@ -105,7 +118,10 @@ class _GoalsScreenState extends State<GoalsScreen> {
               else
                 for (final g in list)
                   Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
+                    padding: EdgeInsets.only(
+                      bottom: 10,
+                      left: g.parentId != null && shown.contains(g.parentId) ? 22 : 0,
+                    ),
                     child: _GoalCard(goal: g, onTap: () => widget.onOpen(g)),
                   ),
             ],
@@ -194,6 +210,7 @@ class _GoalCard extends StatelessWidget {
       return g.finishedOn == null ? 'Достигнута' : 'Достигнута ${formatDate(g.finishedOn!)}';
     }
     if (g.archived) return 'Отложена';
+    if (g.awaiting) return 'Не выполнена — ждёт решения';
     final t = todayDay();
     if (doneOn(g, t)) return 'Сегодня выполнено · далее ${formatRelative(g.nextDue)}';
     if (g.nextDue == t) return 'Нужно сделать сегодня';

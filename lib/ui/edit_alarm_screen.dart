@@ -7,6 +7,7 @@ import '../models/day.dart';
 import '../models/goal.dart' show RepeatType;
 import '../services/alarm_bridge.dart';
 import '../state/alarm_store.dart';
+import '../state/app_settings.dart';
 import 'color_picker.dart';
 import 'format.dart';
 import 'schedule_picker.dart';
@@ -57,11 +58,12 @@ class _EditAlarmScreenState extends State<EditAlarmScreen> {
     _cycleOn = a?.cycleOn ?? 2;
     _cycleOff = a?.cycleOff ?? 2;
     _start = a?.startDate ?? t;
-    _sound = a?.sound ?? 'builtin:soft';
-    _soundTitle = a?.soundTitle ?? builtinAlarmSounds['soft']!;
-    _vibrate = a?.vibrate ?? true;
-    _ramp = a?.ramp ?? true;
-    _snooze = a?.snoozeMinutes ?? 10;
+    final defs = AppSettings.instance;
+    _sound = a?.sound ?? defs.alarmSound;
+    _soundTitle = a?.soundTitle ?? defs.alarmSoundTitle;
+    _vibrate = a?.vibrate ?? defs.alarmVibrate;
+    _ramp = a?.ramp ?? defs.alarmRamp;
+    _snooze = a?.snoozeMinutes ?? defs.alarmSnooze;
     _color = a?.colorIndex ?? (widget.store.alarms.length % goalPalettes.length);
     _customColor = a?.customColor;
   }
@@ -98,7 +100,7 @@ class _EditAlarmScreenState extends State<EditAlarmScreen> {
       showDragHandle: true,
       isScrollControlled: true,
       backgroundColor: AppColors.card(context),
-      builder: (c) => _SoundSheet(current: _sound, palette: _pal),
+      builder: (c) => SoundSheet(current: _sound, palette: _pal),
     );
     await AlarmBridge.stopPreview();
     if (result != null) {
@@ -398,16 +400,16 @@ class _EditAlarmScreenState extends State<EditAlarmScreen> {
 }
 
 /// Выбор мелодии с прослушиванием.
-class _SoundSheet extends StatefulWidget {
-  const _SoundSheet({required this.current, required this.palette});
+class SoundSheet extends StatefulWidget {
+  const SoundSheet({required this.current, required this.palette});
   final String current;
   final GoalPalette palette;
 
   @override
-  State<_SoundSheet> createState() => _SoundSheetState();
+  State<SoundSheet> createState() => SoundSheetState();
 }
 
-class _SoundSheetState extends State<_SoundSheet> {
+class SoundSheetState extends State<SoundSheet> {
   String? _playing;
 
   Future<void> _toggle(String sound) async {

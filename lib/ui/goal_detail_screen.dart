@@ -7,6 +7,7 @@ import '../models/goal.dart';
 import '../state/goal_store.dart';
 import 'edit_goal_screen.dart';
 import 'format.dart';
+import 'miss_choice.dart';
 import 'settings_screen.dart' show carryTitles;
 import 'theme.dart';
 import 'widgets.dart';
@@ -25,7 +26,10 @@ class GoalDetailScreen extends StatelessWidget {
       context: context,
       builder: (c) => AlertDialog(
         title: const Text('Удалить цель?'),
-        content: Text('«${g.title}» и вся её история будут удалены без возможности восстановления.'),
+        content: Text(store.children(g).isEmpty
+            ? '«${g.title}» и вся её история будут удалены без возможности восстановления.'
+            : '«${g.title}» и привязанные к ней цели (${store.children(g).length}) будут удалены '
+                'без возможности восстановления.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Отмена')),
           TextButton(
@@ -58,6 +62,8 @@ class GoalDetailScreen extends StatelessWidget {
         final doneToday = doneOn(g, t);
         final p = progress(g);
         final end = projectedEnd(g);
+        final kids = store.children(g);
+        final canSkip = isActive(g) && !g.awaiting && !doneOn(g, g.nextDue);
 
         return Scaffold(
           appBar: AppBar(
@@ -70,11 +76,20 @@ class GoalDetailScreen extends StatelessWidget {
               PopupMenuButton<String>(
                 icon: const Icon(Icons.more_horiz_rounded),
                 onSelected: (v) {
+                  if (v == 'skip') store.skipOnce(g);
                   if (v == 'archive') store.setArchived(g, !g.archived);
                   if (v == 'delete') _delete(context, g);
                 },
                 itemBuilder: (_) => [
-                  if (!g.finished)
+                  if (canSkip)
+                    PopupMenuItem(
+                      value: 'skip',
+                      child: Text(kids.isEmpty
+                          ? 'Пропустить этот раз'
+                          : 'Пропустить этот раз (и связанные)'),
+                    ),
+                  // Привязанная цель уходит в архив и возвращается вместе с главной.
+                  if (!g.finished && g.parentId == null)
                     PopupMenuItem(
                       value: 'archive',
                       child: Text(g.archived ? 'Вернуть из архива' : 'Отложить в архив'),
@@ -98,14 +113,16 @@ class GoalDetailScreen extends StatelessWidget {
               ),
               const SizedBox(height: 4),
               Text(
-                'При пропуске: ${carryTitles[g.carry]!.toLowerCase()}',
+                'Если не выполнена: ${carryTitles[g.carry]!.toLowerCase()}',
                 textAlign: TextAlign.center,
                 style: th.textTheme.bodySmall?.copyWith(color: th.colorScheme.onSurfaceVariant),
               ),
               const SizedBox(height: 10),
               Center(child: _statusPill(context, g, dueToday, doneToday)),
               const SizedBox(height: 22),
-              if (dueToday)
+              if (g.awaiting && isActive(g))
+                MissChoiceCard(store: store, goal: g)
+              else if (dueToday)
                 _GradientButton(
                   palette: pal,
                   icon: Icons.check_rounded,
@@ -121,7 +138,7 @@ class GoalDetailScreen extends StatelessWidget {
                   icon: const Icon(Icons.undo_rounded),
                   label: const Text('Отменить сегодняшнюю отметку'),
                 )
-              else if (g.archived)
+              else if (g.archived && g.parentId == null)
                 OutlinedButton.icon(
                   onPressed: store.canAdd ? () => store.setArchived(g, false) : null,
                   icon: const Icon(Icons.unarchive_rounded),
@@ -171,6 +188,43 @@ class GoalDetailScreen extends StatelessWidget {
                   ),
                 ],
               ),
+              if (g.parent != null) ...[
+                const SectionTitle('Главная цель'),
+                AppCard(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: _LinkRow(
+                    goal: g.parent!,
+                    caption: linkText(g),
+                    onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
+                      builder: (_) => GoalDetailScreen(store: store, goalId: g.parent!.id),
+                    )),
+                  ),
+                ),
+              ],
+              if (kids.isNotEmpty) ...[
+                const SectionTitle('Связанные цели'),
+                AppCard(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: Column(
+                    children: [
+                      for (var i = 0; i < kids.length; i++) ...[
+                        if (i > 0) const Divider(indent: 68),
+                        _LinkRow(
+                          goal: kids[i],
+                          caption: kids[i].offsetDays < 0
+                              ? 'за ${daysWord(-kids[i].offsetDays)} до'
+                              : kids[i].offsetDays > 0
+                                  ? 'через ${daysWord(kids[i].offsetDays)} после'
+                                  : 'в тот же день',
+                          onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
+                            builder: (_) => GoalDetailScreen(store: store, goalId: kids[i].id),
+                          )),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
               if (p != null) ...[
                 const SectionTitle('Прогресс'),
                 AppCard(
@@ -221,6 +275,9 @@ class GoalDetailScreen extends StatelessWidget {
     }
     if (g.archived) {
       return Pill(icon: Icons.inventory_2_rounded, text: 'В архиве', color: th.colorScheme.onSurfaceVariant);
+    }
+    if (g.awaiting) {
+      return Pill(icon: Icons.help_outline_rounded, text: 'Не выполнена — ждёт решения', color: th.colorScheme.error);
     }
     if (doneToday) {
       return Pill(icon: Icons.check_rounded, text: 'Сегодня выполнено', color: AppColors.success(context));
@@ -489,4 +546,46 @@ class _Heatmap extends StatelessWidget {
                   ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
         ],
       );
+}
+
+/// Строка со связанной целью.
+class _LinkRow extends StatelessWidget {
+  const _LinkRow({required this.goal, required this.caption, required this.onTap});
+  final Goal goal;
+  final String caption;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final th = Theme.of(context);
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        child: Row(
+          children: [
+            GoalBadge.of(goal, size: 38),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(goal.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: th.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w500)),
+                  Text(caption,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: th.textTheme.bodySmall
+                          ?.copyWith(color: th.colorScheme.onSurfaceVariant)),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right_rounded, color: th.colorScheme.onSurfaceVariant),
+          ],
+        ),
+      ),
+    );
+  }
 }
